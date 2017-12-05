@@ -17,6 +17,8 @@ logging.basicConfig(level=logging.DEBUG,
                     filemode='w')  
 
 def main():
+    pd.set_option('expand_frame_repr', False)
+
     outFileName = sys.argv[1]
     inFileName = sys.argv[2]
 
@@ -36,12 +38,15 @@ def main():
     df['Dst_IP'] = df['Dst_IP'].astype(str)
     df['Src_Port'] = df['Src_Port'].astype(int)
     df['Dst_Port'] = df['Dst_Port'].astype(int)
+    df['Protocol'] = df['Protocol'].astype(int)
     df['Length(Bytes)'] = df['Length(Bytes)'].astype(int)
+    #df['TCP_Flags'] = df['TCP_Flags'].astype(int)
+
+    df[['DateTime', 'Src_IP', 'Dst_IP', 'Src_Port', 'Dst_Port', 'Protocol', \
+    'Length(Bytes)']].to_csv('univ1_allPkt.csv', index=False)
 
     df = df.sort_values(['Protocol', 'Src_IP', 'Dst_IP', 'Src_Port', 'Dst_Port', 'Timestamp'])
     df = df.reset_index(drop=True)
-    df[['DateTime', 'Src_IP', 'Dst_IP', 'Src_Port', 'Dst_Port', 'Protocol', \
-    'Length(Bytes)']].to_csv('univ1_filter.csv', index=False)
 
     print 'packet counts = ' + str(len(df))
 
@@ -70,7 +75,7 @@ def main():
     del attributeFlows
 
     print 'create csv file'
-    cols_to_keep = ['start_date_time', 'end_date_time', 'srcip', 'srcport', 'dstip', 'dstport', 'protocol']
+    cols_to_keep = ['start_date_time', 'end_date_time', 'srcip', 'srcport', 'dstip', 'dstport', 'protocol', 'transferred_bytes']
     allFlow[cols_to_keep].to_csv(outFileName+'.csv', index=False)
 
     print 'create arff file'
@@ -118,7 +123,8 @@ def generateAttrFlows(flowSlice):
         del packetSizes
 
         attributeFlow['1+2_pkt_size'] = attributeFlow['1_pkt_size'] + attributeFlow['2_pkt_size']
-        attributeFlow['1+2+3_pkt_size'] = attributeFlow['1_pkt_size'] + attributeFlow['2_pkt_size'] + attributeFlow['3_pkt_size']
+        attributeFlow['1+2+3_pkt_size'] = attributeFlow['1_pkt_size'] + attributeFlow['2_pkt_size'] + \
+        attributeFlow['3_pkt_size']
         attributeFlow['1+3_pkt_size'] = attributeFlow['1_pkt_size'] + attributeFlow['3_pkt_size']
         attributeFlow['2+3_pkt_size'] = attributeFlow['2_pkt_size'] + attributeFlow['3_pkt_size']
 
