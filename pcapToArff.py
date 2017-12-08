@@ -47,7 +47,7 @@ def main():
 
     df = df.sort_values(['Protocol', 'Src_IP', 'Dst_IP', 'Src_Port', 'Dst_Port', 'Timestamp'])
     df = df.reset_index(drop=True)
-
+    
     print 'packet counts = ' + str(len(df))
 
     df_copy = df.copy()
