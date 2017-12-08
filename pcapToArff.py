@@ -49,9 +49,6 @@ def main():
     df = df.reset_index(drop=True)
 
     print 'packet counts = ' + str(len(df))
-    
-    print df
-    time.sleep(1200)
 
     df_copy = df.copy()
     df_copy.drop(['DateTime', 'Timestamp', 'Length(Bytes)', 'TCP_Flags'], axis=1, inplace=True)
