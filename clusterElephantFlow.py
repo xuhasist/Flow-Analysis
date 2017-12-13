@@ -42,9 +42,12 @@ def main():
     
     del result
     
-    k = 6
+    k = 4
     edgeSw = (k/2) * k
     host = len(ip_list)
+    
+    print host
+    print ip_list
 
     edgeSw_host = []
 

@@ -219,7 +219,7 @@ def generateAttrFlows(flowSlice):
         else:
             attributeFlow['duration_10'] = 'yes'
 
-        if attributeFlow['duration'] > 1 and attributeFlow['avg_byte_thr'] > 1000:
+        if attributeFlow['duration'] >= 1 and attributeFlow['avg_byte_thr'] >= 1000:
             attributeFlow['elephant'] = 'yes'
         else:
             attributeFlow['elephant'] = 'no'
