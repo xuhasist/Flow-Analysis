@@ -46,8 +46,8 @@ def main():
     edgeSw = (k/2) * k
     host = len(ip_list)
     
-    print host
-    print ip_list
+    #print host
+    #print ip_list
 
     edgeSw_host = []
 
@@ -56,24 +56,17 @@ def main():
     ip_df = result[1]
 
     del result
-
-    i = 0
-    for x in range(0, edgeSw):
-        mask = elephantFlow.srcip.isin(ip_list[i:i+edgeSw_host[x]])
-        elephantFlow_filter = elephantFlow[mask]
-
-        time_group = [0, 0, 0]
-        for y, interval in enumerate(timeInterval_set):
-            time_group[y] = groupTime(interval, elephantFlow_filter, flow_start_time, flow_end_time)
-            
-        for y, group in enumerate(time_group):
-            remain_flow = groupPrefix(3, ['srcip_1', 'srcip_2', 'srcip_3', 'dstip_1', 'dstip_2', 'dstip_3'], group, \
-            elephantFlow, ip_df, y)
-            remain_flow = groupPrefix(2, ['srcip_1', 'srcip_2', 'dstip_1', 'dstip_2'],  remain_flow, elephantFlow, ip_df, y)
-            remain_flow = groupPrefix(1, ['srcip_1', 'dstip_1'], remain_flow, elephantFlow, ip_df, y)
-
-        i = i + edgeSw_host[x]
-
+    
+    time_group = [0, 0, 0]
+    for y, interval in enumerate(timeInterval_set):
+        time_group[y] = groupTime(interval, elephantFlow, flow_start_time, flow_end_time)
+        
+    for y, group in enumerate(time_group):
+        remain_flow = groupPrefix(3, ['srcip_1', 'srcip_2', 'srcip_3', 'dstip_1', 'dstip_2', 'dstip_3'], group, \
+        elephantFlow, ip_df, y)
+        remain_flow = groupPrefix(2, ['srcip_1', 'srcip_2', 'dstip_1', 'dstip_2'],  remain_flow, elephantFlow, ip_df, y)
+        remain_flow = groupPrefix(1, ['srcip_1', 'dstip_1'], remain_flow, elephantFlow, ip_df, y)
+    
     elephantFlow.drop(['srcip_1', 'srcip_2', 'srcip_3', 'srcip_4', 'dstip_1', 'dstip_2', 'dstip_3', 'dstip_4'], \
     axis=1, inplace=True)
 
@@ -82,6 +75,7 @@ def main():
 
     elephantFlow.to_csv('elephantFlow_' + str(k) + '.csv', index=False, header=False)
   
+
 def groupPrefix(n, prefix_list, flow, elephantFlow, ip_df, x):
     subset = flow[prefix_list]
     ip_set = set(tuple(x) for x in subset.values)
@@ -101,11 +95,10 @@ def groupPrefix(n, prefix_list, flow, elephantFlow, ip_df, x):
             group = flow[(flow['srcip_1'] == ip[0]) & (flow['srcip_2'] == ip[1]) & \
             (flow['srcip_3'] == ip[2]) & (flow['dstip_1'] == ip[3]) & \
             (flow['dstip_2'] == ip[4]) & (flow['dstip_3'] == ip[5])]
-
+            
         if len(group) == 1: #or len(group) > threshold:
             remain_flow = remain_flow.append(group)
-        elif len((ip_df[ip_df['ip'].isin(group['dstip'].drop_duplicates().tolist())]['edgeSw'].drop_duplicates()).tolist()) \
-        >= 2:
+        elif (len((ip_df[ip_df['ip'].isin(group['dstip'].drop_duplicates().tolist())]['edgeSw'].drop_duplicates()).tolist()) >= 2) | (len((ip_df[ip_df['ip'].isin(group['srcip'].drop_duplicates().tolist())]['edgeSw'].drop_duplicates()).tolist()) >= 2):
             pass
         else:
             elephantFlow.loc[group.index.tolist(), 'group'] = n
