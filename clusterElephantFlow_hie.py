@@ -56,7 +56,7 @@ def main():
     
     cluster_result = []
     for i in range(0, len(timeInterval_set)):
-        cluster_result.append(pd.DataFrame([], columns=['group_index', 'time_slot', 'src_sw', 'dst_sw', \
+        cluster_result.append(pd.DataFrame([], columns=['flow_index', 'hie_index', 'time_slot', 'src_sw', 'dst_sw', \
         'srcip', 'dstip', 'prefix_group_1']))
         
     time_group = [0, 0, 0]
@@ -81,13 +81,16 @@ def main():
         remain_flow = result[0]
         cluster_result[y] = result[1]
         
+        remain_flow_index = remain_flow.index.tolist()
+        
         for i in range(len(remain_flow)):
             src_sw = (ip_df[ip_df['ip'] == remain_flow.iloc[i]['srcip']]['edgeSw']).tolist()
             src_sw = src_sw[0]      
             dst_sw = (ip_df[ip_df['ip'] == remain_flow.iloc[i]['dstip']]['edgeSw']).tolist()
             dst_sw = dst_sw[0]
             
-            cluster_result[y] = cluster_result[y].append({'time_slot': y, 'src_sw': src_sw, 'dst_sw': dst_sw, \
+            cluster_result[y] = cluster_result[y].append({'flow_index': remain_flow_index[i], \
+            'time_slot': y, 'src_sw': src_sw, 'dst_sw': dst_sw, \
             'srcip': remain_flow.iloc[i]['srcip'], 'dstip': remain_flow.iloc[i]['dstip'], 'prefix_group_1': -1}, \
             ignore_index=True)    
         
@@ -132,22 +135,35 @@ def main():
         
         cluster_result[y].drop(['srcip_1', 'srcip_2', 'srcip_3', 'srcip_4', 'dstip_1', 'dstip_2', 'dstip_3', 'dstip_4'], \
         axis=1, inplace=True)
-        
-        #print cluster_result[y]
-
-    elephantFlow.drop(['srcip_1', 'srcip_2', 'srcip_3', 'srcip_4', 'dstip_1', 'dstip_2', 'dstip_3', 'dstip_4'], \
-    axis=1, inplace=True)
-
-    cols = ['start_date_time', 'end_date_time', 'srcip', 'dstip', 'srcport', 'dstport', 'protocol', 'bytes', 'prefix_group_1']
-    elephantFlow = elephantFlow[cols]
-
-    elephantFlow.to_csv('elephantFlow_' + str(k) + '.csv', index=False, header=False)
+      
+    elephantFlow['hie_index'] = -1  
+    elephantFlow['src_sw'] = -1  
+    elephantFlow['dst_sw'] = -1
+    elephantFlow['prefix_group_2'] = -1
     
     hierarchyFlow = (cluster_result[0].append(cluster_result[1])).append(cluster_result[2])
     
     hierarchyFlow = hierarchyFlow[hierarchyFlow['prefix_group_2'] != -1]
     hierarchyFlow = hierarchyFlow.reset_index(drop=True)
-    hierarchyFlow = hierarchyFlow.sort_values(['group_index'])
+    hierarchyFlow = hierarchyFlow.sort_values(['hie_index'])
+    
+    for i in range(len(hierarchyFlow)):
+        elephantFlow.loc[hierarchyFlow.iloc[i]['flow_index'], 'hie_index'] = hierarchyFlow.iloc[i]['hie_index']
+        elephantFlow.loc[hierarchyFlow.iloc[i]['flow_index'], 'src_sw'] = hierarchyFlow.iloc[i]['src_sw']
+        elephantFlow.loc[hierarchyFlow.iloc[i]['flow_index'], 'dst_sw'] = hierarchyFlow.iloc[i]['dst_sw']
+        elephantFlow.loc[hierarchyFlow.iloc[i]['flow_index'], 'prefix_group_2'] = \
+        hierarchyFlow.iloc[i]['prefix_group_2']
+        
+    elephantFlow.drop(['srcip_1', 'srcip_2', 'srcip_3', 'srcip_4', 'dstip_1', 'dstip_2', 'dstip_3', 'dstip_4'], \
+    axis=1, inplace=True)
+
+    cols = ['start_date_time', 'end_date_time', 'srcip', 'dstip', 'srcport', 'dstport', 'protocol', \
+    'bytes', 'prefix_group_1', 'hie_index', 'src_sw', 'dst_sw', 'prefix_group_2']
+    elephantFlow = elephantFlow[cols]
+
+    elephantFlow.to_csv('elephantFlow_' + str(k) + '.csv', index=False, header=False)
+    
+    hierarchyFlow.drop(['flow_index'], axis=1, inplace=True)
     hierarchyFlow.to_csv('hierarchyFlow_' + str(k) + '.csv', index=False, header=False)
     #print hierarchyFlow
 
@@ -177,7 +193,7 @@ def hierarchy_cluster(n, prefix_list, flow, cluster_result, group_index):
         (len((group['dst_sw'].drop_duplicates()).tolist()) == 1):
             pass
         else:
-            cluster_result.loc[group.index.tolist(), 'group_index'] = group_index
+            cluster_result.loc[group.index.tolist(), 'hie_index'] = group_index
             cluster_result.loc[group.index.tolist(), 'prefix_group_2'] = n
             group_index = group_index + 1
 
@@ -218,19 +234,19 @@ def groupPrefix(n, prefix_list, flow, elephantFlow, ip_df, cluster_result, y):
             elephantFlow.loc[group.index.tolist(), 'prefix_group_1'] = n
             
             if n == 1:
-                cluster_result = cluster_result.append({'time_slot': y, \
+                cluster_result = cluster_result.append({'flow_index': group.index.tolist(), 'time_slot': y, \
                 'src_sw': src_sw, 'dst_sw': dst_sw, 'srcip': ip[0]+'.0.0.0', \
                 'dstip': ip[1]+'.0.0.0', 'prefix_group_1': n}, ignore_index=True)
             elif n == 2:
-                cluster_result = cluster_result.append({'time_slot': y, \
+                cluster_result = cluster_result.append({'flow_index': group.index.tolist(), 'time_slot': y, \
                 'src_sw': src_sw, 'dst_sw': dst_sw, 'srcip': ip[0]+'.'+ip[1]+'.0.0', \
                 'dstip': ip[2]+'.'+ip[3]+'.0.0', 'prefix_group_1': n}, ignore_index=True)
             elif n == 3:
-                cluster_result = cluster_result.append({'time_slot': y, 'src_sw': src_sw, 'dst_sw': dst_sw, \
+                cluster_result = cluster_result.append({'flow_index': group.index.tolist(), 'time_slot': y, \
+                'src_sw': src_sw, 'dst_sw': dst_sw, \
                 'srcip': ip[0]+'.'+ip[1]+'.'+ip[2]+'.0', 'dstip': ip[3]+'.'+ip[4]+'.'+ip[5]+'.0', 'prefix_group_1': n}, \
                 ignore_index=True)
             
-
     return [remain_flow, cluster_result]
 
 
