@@ -1,7 +1,6 @@
 clearvars
 clearvars -global
 
-
 global g
 global link
 global g_adj
@@ -11,11 +10,170 @@ global preLower
 global nodeName
 global sw_struct
 global sw_number
+global sw_vector
 global link_struct
 
 t1 = datetime('now');
 
 
+% AS_topo
+topoInfo = textread('as_topo.brite', '%s', 'delimiter', '\n');
+token = strsplit(topoInfo{1}, ' ');
+
+swNum = str2double(token{3});
+edgeNum = str2double(token{5});
+host = 1753;
+
+nodeCount = zeros(swNum + host);
+nodeName = {};
+
+sw_number = swNum;
+
+for i = 1:swNum
+    nodeName{i} = strcat('sw-', int2str(i));
+end
+
+for i = 1+swNum:swNum+host
+    nodeName{i} = strcat('h-', int2str(i-(swNum)));
+end
+
+g = graph(nodeCount, nodeName);
+g_ = graph(zeros(swNum), nodeName(1:swNum));
+
+token = strsplit(topoInfo{7}, '\t');
+startNodeInd = str2double(token{1});
+
+srcNode = {};
+dstNode = {};
+srcInf = [];
+dstInf = [];
+
+if_temp = ones(1,swNum);
+for i = 7+(swNum+3):7+(swNum+3)+(edgeNum-1)
+    token = strsplit(topoInfo{i}, '\t');
+    
+    node1 = str2double(token{2})+1-startNodeInd;
+    node2 = str2double(token{3})+1-startNodeInd;
+    
+    g = addedge(g, node1, node2, str2double(token{6}));
+    g_ = addedge(g_, node1, node2, str2double(token{6}));
+    
+    srcNode = [srcNode; strcat('sw-', int2str(node1))];
+    dstNode = [dstNode; strcat('sw-', int2str(node2))];
+    srcInf = [srcInf; if_temp(node1)];
+    dstInf = [dstInf; if_temp(node2)];
+
+    srcNode = [srcNode; strcat('sw-', int2str(node2))];
+    dstNode = [dstNode; strcat('sw-', int2str(node1))];
+    srcInf = [srcInf; if_temp(node2)];
+    dstInf = [dstInf; if_temp(node1)];
+    
+    if_temp(node2) = if_temp(node2) + 1;
+    if_temp(node1) = if_temp(node1) + 1;
+end
+
+as = [];
+type = {};
+for i = 7:7+(swNum-1)
+    token = strsplit(topoInfo{i}, '\t');
+    
+    as = [as; str2double(token{6})+1];
+    type = [type; token{7}];
+end
+
+nodeT = table(nodeName(1:swNum)', as, type);
+nodeT.Properties.VariableNames = {'Node', 'AS', 'Type'};
+
+asNum = length(unique(nodeT.AS));
+k = sqrt(asNum*2);
+
+host_at_pod(1:k) = round(host / k);
+host_at_pod(end) = host - round(host / k)*(k-1);
+
+
+pod = 1;
+for i = 1:(k/2):asNum
+    host_at_sw(i:i+(k/2)-1) = round(host_at_pod(pod) / (k/2));
+    host_at_sw(end) = host_at_pod(pod) - round(host_at_pod(pod) / (k/2))*(k/2-1);
+        
+    pod = pod + 1;
+end
+
+host_c = 1;
+m = 1;
+green_nodes = [];
+for i = 1:asNum
+    rows = (nodeT.AS == i) & strcmp(nodeT.Type, 'RT_NODE');
+    nodes = nodeT{rows, {'Node'}};
+    nodes = findnode(g, nodes(1));
+    green_nodes = [green_nodes nodes];
+    
+    for n = host_c:(host_c+host_at_sw(m))-1            
+        g = addedge(g, strcat('sw-', int2str(nodes)), strcat('h-', int2str(n)), 1);  
+
+        srcNode = [srcNode; strcat('sw-', int2str(nodes))];
+        dstNode = [dstNode; strcat('h-', int2str(n))];
+        srcInf = [srcInf; if_temp(nodes)];
+        dstInf = [dstInf; 1];
+
+        srcNode = [srcNode; strcat('h-', int2str(n))];
+        dstNode = [dstNode; strcat('sw-', int2str(nodes))];
+        srcInf = [srcInf; 1];
+        dstInf = [dstInf; if_temp(nodes)];
+
+        if_temp(nodes) = if_temp(nodes) + 1;
+    end
+    
+    host_c = host_c + host_at_sw(m);
+    m = m + 1;
+end
+
+x_axis_start = 1;
+y_axis = [3, 1, 5, 2, 4];
+y_axis_shift = [20, 30, 10, 40, 1, 30, 10, 20];
+for i = 1:asNum
+    rows = (nodeT.AS == i);
+    nodes = findnode(g, nodeT{rows, {'Node'}});
+    
+    x(nodes) = x_axis_start:x_axis_start+length(nodes)-1;
+    y(nodes) = y_axis + y_axis_shift(i);
+    
+    if mod(i, 2) ~= 0
+        x_axis_start = x_axis_start+length(nodes);
+    end
+end
+
+x(1+swNum:swNum+host) = 1:host;
+y(1+swNum:swNum+host) = 0;
+
+%topo = plot(g, 'XData', x, 'YData', y);
+topo = plot(g_, 'XData', x(1:swNum), 'YData', y(1:swNum));
+
+color = {'r', 'g', 'b', 'y', 'm', 'c', 'r', 'k'};
+for i = 1:swNum
+    if strcmp(nodeT{i, 'Type'}{1}, 'RT_BORDER')
+        highlight(topo, i, 'NodeColor', 'r')
+    elseif find(ismember(green_nodes, i) == 1)
+        highlight(topo, i, 'NodeColor', 'g')
+    else
+        highlight(topo, i, 'NodeColor', 'k')
+    end
+end
+
+for i = 1:length(green_nodes)
+    g.Nodes.Name{green_nodes(i)} = ['ed-', int2str(i)];
+    nodeT.Node{green_nodes(i)} = ['ed-', int2str(i)];
+    
+    rows = strcmp(srcNode, nodeName{green_nodes(i)});
+    srcNode(rows) = {['ed-', int2str(i)]};
+    
+    rows = strcmp(dstNode, nodeName{green_nodes(i)});
+    dstNode(rows) = {['ed-', int2str(i)]};
+    
+    nodeName{green_nodes(i)} = ['ed-', int2str(i)];
+end
+
+%{
 % fat tree 
 k = 4;
 
@@ -154,151 +312,6 @@ y(1+coreSw+aggrSw:coreSw+aggrSw+edgeSw) = 1;
 y(1+coreSw+aggrSw+edgeSw:coreSw+aggrSw+edgeSw+host) = 0;
 
 topo = plot(g, 'XData', x, 'YData', y);
-
-%{
-% AS_topo
-topoInfo = textread('as_topo.brite', '%s', 'delimiter', '\n');
-token = strsplit(topoInfo{1}, ' ');
-
-swNum = str2double(token{3});
-edgeNum = str2double(token{5});
-host = 1753;
-
-nodeCount = zeros(swNum + host);
-nodeName = {};
-
-sw_number = swNum;
-
-for i = 1:swNum
-    nodeName{i} = strcat('sw-', int2str(i));
-end
-
-for i = 1+swNum:swNum+host
-    nodeName{i} = strcat('h-', int2str(i-(swNum)));
-end
-
-g = graph(nodeCount, nodeName);
-g_ = graph(zeros(swNum), nodeName(1:swNum));
-
-token = strsplit(topoInfo{7}, '\t');
-startNodeInd = str2double(token{1});
-
-srcNode = {};
-dstNode = {};
-srcInf = [];
-dstInf = [];
-
-if_temp = ones(1,swNum);
-for i = 7+(swNum+3):7+(swNum+3)+(edgeNum-1)
-    token = strsplit(topoInfo{i}, '\t');
-    
-    node1 = str2double(token{2})+1-startNodeInd;
-    node2 = str2double(token{3})+1-startNodeInd;
-    
-    g = addedge(g, node1, node2, str2double(token{6}));
-    g_ = addedge(g_, node1, node2, str2double(token{6}));
-    
-    srcNode = [srcNode; strcat('sw-', int2str(node1))];
-    dstNode = [dstNode; strcat('sw-', int2str(node2))];
-    srcInf = [srcInf; if_temp(node1)];
-    dstInf = [dstInf; if_temp(node2)];
-
-    srcNode = [srcNode; strcat('sw-', int2str(node2))];
-    dstNode = [dstNode; strcat('sw-', int2str(node1))];
-    srcInf = [srcInf; if_temp(node2)];
-    dstInf = [dstInf; if_temp(node1)];
-    
-    if_temp(node2) = if_temp(node2) + 1;
-    if_temp(node1) = if_temp(node1) + 1;
-end
-
-as = [];
-type = {};
-for i = 7:7+(swNum-1)
-    token = strsplit(topoInfo{i}, '\t');
-    
-    as = [as; str2double(token{6})+1];
-    type = [type; token{7}];
-end
-
-nodeT = table(nodeName(1:swNum)', as, type);
-nodeT.Properties.VariableNames = {'Node', 'AS', 'Type'};
-
-asNum = length(unique(nodeT.AS));
-k = sqrt(asNum*2);
-
-host_at_pod(1:k) = round(host / k);
-host_at_pod(end) = host - round(host / k)*(k-1);
-
-
-pod = 1;
-for i = 1:(k/2):asNum
-    host_at_sw(i:i+(k/2)-1) = round(host_at_pod(pod) / (k/2));
-    host_at_sw(end) = host_at_pod(pod) - round(host_at_pod(pod) / (k/2))*(k/2-1);
-        
-    pod = pod + 1;
-end
-
-host_c = 1;
-m = 1;
-green_nodes = [];
-for i = 1:asNum
-    rows = (nodeT.AS == i) & strcmp(nodeT.Type, 'RT_NODE');
-    nodes = nodeT{rows, {'Node'}};
-    nodes = findnode(g, nodes(1));
-    green_nodes = [green_nodes nodes];
-    
-    for n = host_c:(host_c+host_at_sw(m))-1            
-        g = addedge(g, strcat('sw-', int2str(nodes)), strcat('h-', int2str(n)), 1);  
-
-        srcNode = [srcNode; strcat('sw-', int2str(nodes))];
-        dstNode = [dstNode; strcat('h-', int2str(n))];
-        srcInf = [srcInf; if_temp(nodes)];
-        dstInf = [dstInf; 1];
-
-        srcNode = [srcNode; strcat('h-', int2str(n))];
-        dstNode = [dstNode; strcat('sw-', int2str(nodes))];
-        srcInf = [srcInf; 1];
-        dstInf = [dstInf; if_temp(nodes)];
-
-        if_temp(nodes) = if_temp(nodes) + 1;
-    end
-    
-    host_c = host_c + host_at_sw(m);
-    m = m + 1;
-end
-
-x_axis_start = 1;
-y_axis = [3, 1, 5, 2, 4];
-y_axis_shift = [20, 30, 10, 40, 1, 30, 10, 20];
-for i = 1:asNum
-    rows = (nodeT.AS == i);
-    nodes = findnode(g, nodeT{rows, {'Node'}});
-    
-    x(nodes) = x_axis_start:x_axis_start+length(nodes)-1;
-    y(nodes) = y_axis + y_axis_shift(i);
-    
-    if mod(i, 2) ~= 0
-        x_axis_start = x_axis_start+length(nodes);
-    end
-end
-
-x(1+swNum:swNum+host) = 1:host;
-y(1+swNum:swNum+host) = 0;
-
-topo = plot(g, 'XData', x, 'YData', y);
-%topo = plot(g_, 'XData', x(1:swNum), 'YData', y(1:swNum));
-
-color = {'r', 'g', 'b', 'y', 'm', 'c', 'r', 'k'};
-for i = 1:swNum
-    if strcmp(nodeT{i, 'Type'}{1}, 'RT_BORDER')
-        highlight(topo, i, 'NodeColor', 'r')
-    elseif find(ismember(green_nodes, i) == 1)
-        highlight(topo, i, 'NodeColor', 'g')
-    else
-        highlight(topo, i, 'NodeColor', 'k')
-    end
-end
 %}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -325,18 +338,87 @@ for i = 1:size(link, 1)
 end
 
 [start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes, group, hie_index, srcEdgeSw, dstEdgeSw, group2] = textread('elephantFlow_4.csv', '%s%s%s%s%d%d%s%d%d%d%d%d%d', 'delimiter', ',');
-flow_table = table(start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes, group);
+srcEdgeSw = srcEdgeSw + 1;
+dstEdgeSw = dstEdgeSw + 1;
+
+flow_table = table(start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes, group, hie_index, srcEdgeSw, dstEdgeSw, group2);
 flow_table = sortrows(flow_table, 'start_date_time');
 
+%[hie_index, time_slot, srcEdgeSw, dstEdgeSw, srcip, dstip, prefix_group_1, group2] = textread('hierarchyFlow_4.csv', '%d%d%d%d%s%s%d%d', 'delimiter', ',');
+%hierarchy_cluster = table(hie_index, srcEdgeSw, dstEdgeSw, group2);
+hierarchy_cluster = table(flow_table.hie_index, flow_table.srcEdgeSw, flow_table.dstEdgeSw, flow_table.group2);
+hierarchy_cluster.Properties.VariableNames = {'hie_index', 'srcEdgeSw', 'dstEdgeSw', 'group2'};
+
+flow_table.hie_index = [];
+flow_table.srcEdgeSw = [];
+flow_table.dstEdgeSw = [];
+flow_table.group2 = [];
+
+sw_vector = distances(g, 'Method', 'unweighted');
+sw_vector = sw_vector(1:sw_number, 1:sw_number);
+
+% for as topo
+%rows = strcmp(nodeT.Type, 'RT_NODE');
+%sw_vector(rows, rows) = 0;
+
+for i = 1:max(unique(hierarchy_cluster.hie_index))
+    rows = (hierarchy_cluster.hie_index == i);
+    
+    srcSw = unique(hierarchy_cluster{rows, {'srcEdgeSw'}});
+    dstSw = unique(hierarchy_cluster{rows, {'dstEdgeSw'}});
+
+    for j = 1:length(srcSw)
+        srcSw(j) = findnode(g, ['ed-', int2str(srcSw(j))]);
+    end
+    
+    for j = 1:length(dstSw)
+        dstSw(j) = findnode(g, ['ed-', int2str(dstSw(j))]);
+    end
+    
+    middleSw_1 = find_middle_sw(srcSw);
+    middleSw_2 = find_middle_sw(dstSw);
+    
+    hierarchy_cluster{rows,{'middleSw_1'}} = middleSw_1;
+    hierarchy_cluster{rows,{'middleSw_2'}} = middleSw_2;
+end
 
 preLower = [];
 for i = 1:size(flow_table, 1)
     i    
+    if i == 5533
+        'QQ'
+    end
+    
     rows = strcmp(host_ip.IP, flow_table{i,'srcip'}{1});
     src_name = host_ip{rows, {'Host'}}{1};
     
     rows = strcmp(host_ip.IP, flow_table{i,'dstip'}{1});
-    dst_name = host_ip{rows, {'Host'}}{1};    
+    dst_name = host_ip{rows, {'Host'}}{1};
+    
+    if hierarchy_cluster{i, {'hie_index'}} == -1
+        has_hie = false;
+        loop_count = 1;
+        group_arg = flow_table{i, 'group'};
+    else
+        has_hie = true;
+        middleSw_1 = hierarchy_cluster{i, {'middleSw_1'}};
+        middleSw_2 = hierarchy_cluster{i, {'middleSw_2'}};
+        group2 = hierarchy_cluster{i, {'group2'}};
+        
+        if middleSw_1 == -1
+            middleSw_1 = middleSw_2;
+            middleSw_2 = findnode(g, dst_name);
+            loop_count = 2;
+            group_arg = [flow_table{i, 'group'}, flow_table{i, 'group'}];
+        elseif middleSw_1 == middleSw_2 || middleSw_2 == -1
+            middleSw_2 = findnode(g, dst_name);
+            loop_count = 2;
+            group_arg = [flow_table{i, 'group'}, flow_table{i, 'group'}];
+        else
+            loop_count = 3;
+            group_arg = [flow_table{i, 'group'}, hierarchy_cluster{i, 'group2'}, flow_table{i, 'group'}];
+        end
+    end
     
     flow_start_datetime = datetime(flow_table{i, 'start_date_time'}{1}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
     flow_end_datetime = datetime(flow_table{i, 'end_date_time'}{1}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
@@ -349,119 +431,149 @@ for i = 1:size(flow_table, 1)
     duration = seconds(flow_end_datetime - flow_start_datetime);
     rate = flow_table{i, 'bytes'} / duration;
     
-    flow.dst_name = dst_name;
+    %flow.dst_name = dst_name;
     flow.rate = rate;
         
+    flow_entry = struct();
     flow_entry.start_time = flow_start_strtime;
     flow_entry.end_time = flow_entry_end_strtime;
     flow_entry.protocol = flow_table{i, 'protocol'}{1};
     
-    flow_entry = setFlowEntryForPerflow(flow_entry, flow_table, i);
-    %flow_entry = setFlowEntryForCluster(flow_entry, flow_table, i);
-    
-    rows = strcmp(link_if.Src_Node, src_name);
-    flow_entry.input = link_if{rows, {'Dst_Inf'}};
-    
-    sw = findnode(g, link_if{rows, {'Dst_Node'}}{1});
-    
-    first_node = findnode(g, src_name);
-    final_path = first_node;
-    
-    final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flow_start_datetime);
-    
-    for j = 1:length(final_path)-1
-        edge = findedge(g, final_path(j), final_path(j+1));
-        
-        k_ = length(link_struct(edge).entry);
-        
-        lower = -1;
-        upper = -1;
-        
-        if isempty(link_struct(edge).entry)
-        else            
-            rows = (flow_start_datetime >= datetime({link_struct(edge).entry(preLower(edge):end).start_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS')) & (flow_start_datetime < datetime({link_struct(edge).entry(preLower(edge):end).end_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'));
-            if find(rows == 1)
-                lower = (find(rows == 1) + preLower(edge) - 1);
+    for m = 1:loop_count
+        flow_entry = setFlowEntryForCluster(flow_entry, flow_table, i, group_arg(m));
+
+        if m == 1
+            rows = strcmp(link_if.Src_Node, src_name);
+            flow_entry.input = link_if{rows, {'Dst_Inf'}};
+
+            sw = findnode(g, link_if{rows, {'Dst_Node'}}{1});
+
+            first_node = findnode(g, src_name);
+            final_path = first_node;
+            
+            if ~has_hie
+                dst_name_arg = dst_name;
+            else
+                dst_name_arg = g.Nodes.Name{middleSw_1};
             end
             
-            rows = (flow_end_datetime >= datetime({link_struct(edge).entry(preLower(edge):end).start_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS')) & (flow_end_datetime < datetime({link_struct(edge).entry(preLower(edge):end).end_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'));
-            if find(rows == 1)
-                upper = (find(rows == 1) + preLower(edge) - 1);
-            end
+            flow.dst_name = dst_name_arg;
+        elseif m == 2
+            rows = strcmp(link_if.Src_Node, g.Nodes.Name{final_path(end-1)}) & strcmp(link_if.Dst_Node, g.Nodes.Name{final_path(end)});
+            flow_entry.input = link_if{rows, {'Dst_Inf'}};
+            
+            sw = final_path(end);
+            final_path = [];
+            
+            dst_name_arg = g.Nodes.Name{middleSw_2};
+            flow.dst_name = dst_name_arg;
+        elseif m == 3
+            rows = strcmp(link_if.Src_Node, g.Nodes.Name{final_path(end-1)}) & strcmp(link_if.Dst_Node, g.Nodes.Name{final_path(end)});
+            flow_entry.input = link_if{rows, {'Dst_Inf'}};
+            
+            sw = final_path(end);
+            final_path = [];
+            
+            dst_name_arg = dst_name;
+            flow.dst_name = dst_name_arg;
         end
-        
-        if lower == -1 && upper == -1
-            link_struct(edge).entry(k_+1).start_time = flow_entry.start_time;
-            link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
-            link_struct(edge).entry(k_+1).load = rate;
-        elseif lower == upper && upper ~= -1
-            link_struct(edge).entry(k_+1).start_time = flow_entry.start_time;
-            link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
-            link_struct(edge).entry(k_+1).load = rate +  link_struct(edge).entry(lower).load;
-            
-            link_struct(edge).entry(k_+2).start_time = flow_end_strtime;
-            link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
-            link_struct(edge).entry(k_+2).load = link_struct(edge).entry(lower).load;           
-            
-            if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
-                link_struct(edge).entry(lower) = [];
-            else
-                link_struct(edge).entry(lower).end_time = flow_entry.start_time;
-            end
-        elseif lower == k_ && upper == -1
-            link_struct(edge).entry(k_+1).start_time = link_struct(edge).entry(lower).end_time;
-            link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
-            link_struct(edge).entry(k_+1).load = rate;
-            
-            link_struct(edge).entry(k_+2).start_time = flow_entry.start_time;
-            link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
-            link_struct(edge).entry(k_+2).load = rate +  link_struct(edge).entry(lower).load;
-            
-            if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
-                link_struct(edge).entry(lower) = [];
-            else
-                link_struct(edge).entry(lower).end_time = flow_entry.start_time;
-            end
-        elseif lower < upper || upper == -1
-            if upper == -1
-                for n = lower+1:k_
-                    link_struct(edge).entry(n).load = rate + link_struct(edge).entry(n).load;
-                end
-                
-                link_struct(edge).entry(k_+1).start_time = link_struct(edge).entry(k_).end_time;
-                link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
-                link_struct(edge).entry(k_+1).load = rate;
-            else
-                for n = lower+1:upper-1
-                    link_struct(edge).entry(n).load = rate + link_struct(edge).entry(n).load;
+
+        final_path = processPkt(sw, flow_entry, dst_name_arg, dst_name, flow, final_path, flow_start_datetime);
+
+        for j = 1:length(final_path)-1
+            edge = findedge(g, final_path(j), final_path(j+1));
+
+            k_ = length(link_struct(edge).entry);
+
+            lower = -1;
+            upper = -1;
+
+            if isempty(link_struct(edge).entry)
+            else            
+                rows = (flow_start_datetime >= datetime({link_struct(edge).entry(preLower(edge):end).start_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS')) & (flow_start_datetime < datetime({link_struct(edge).entry(preLower(edge):end).end_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'));
+                if find(rows == 1)
+                    lower = (find(rows == 1) + preLower(edge) - 1);
                 end
 
-                link_struct(edge).entry(k_+1).start_time = flow_end_strtime;
-                link_struct(edge).entry(k_+1).end_time = link_struct(edge).entry(upper).end_time;
-                link_struct(edge).entry(k_+1).load = link_struct(edge).entry(upper).load;
-                
-                link_struct(edge).entry(upper).end_time = flow_end_strtime;
-                link_struct(edge).entry(upper).load = rate + link_struct(edge).entry(upper).load;
+                rows = (flow_end_datetime >= datetime({link_struct(edge).entry(preLower(edge):end).start_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS')) & (flow_end_datetime < datetime({link_struct(edge).entry(preLower(edge):end).end_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'));
+                if find(rows == 1)
+                    upper = (find(rows == 1) + preLower(edge) - 1);
+                end
             end
-            
-            link_struct(edge).entry(k_+2).start_time = flow_entry.start_time;
-            link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
-            link_struct(edge).entry(k_+2).load = rate +  link_struct(edge).entry(lower).load;
-            
-            if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
-                link_struct(edge).entry(lower) = [];
+
+            if lower == -1 && upper == -1
+                link_struct(edge).entry(k_+1).start_time = flow_entry.start_time;
+                link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
+                link_struct(edge).entry(k_+1).load = rate;
+            elseif lower == upper && upper ~= -1
+                link_struct(edge).entry(k_+1).start_time = flow_entry.start_time;
+                link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
+                link_struct(edge).entry(k_+1).load = rate +  link_struct(edge).entry(lower).load;
+
+                link_struct(edge).entry(k_+2).start_time = flow_end_strtime;
+                link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
+                link_struct(edge).entry(k_+2).load = link_struct(edge).entry(lower).load;           
+
+                if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
+                    link_struct(edge).entry(lower) = [];
+                else
+                    link_struct(edge).entry(lower).end_time = flow_entry.start_time;
+                end
+            elseif lower == k_ && upper == -1
+                link_struct(edge).entry(k_+1).start_time = link_struct(edge).entry(lower).end_time;
+                link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
+                link_struct(edge).entry(k_+1).load = rate;
+
+                link_struct(edge).entry(k_+2).start_time = flow_entry.start_time;
+                link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
+                link_struct(edge).entry(k_+2).load = rate +  link_struct(edge).entry(lower).load;
+
+                if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
+                    link_struct(edge).entry(lower) = [];
+                else
+                    link_struct(edge).entry(lower).end_time = flow_entry.start_time;
+                end
+            elseif lower < upper || upper == -1
+                if upper == -1
+                    for n = lower+1:k_
+                        link_struct(edge).entry(n).load = rate + link_struct(edge).entry(n).load;
+                    end
+
+                    link_struct(edge).entry(k_+1).start_time = link_struct(edge).entry(k_).end_time;
+                    link_struct(edge).entry(k_+1).end_time = flow_end_strtime;
+                    link_struct(edge).entry(k_+1).load = rate;
+                else
+                    for n = lower+1:upper-1
+                        link_struct(edge).entry(n).load = rate + link_struct(edge).entry(n).load;
+                    end
+
+                    link_struct(edge).entry(k_+1).start_time = flow_end_strtime;
+                    link_struct(edge).entry(k_+1).end_time = link_struct(edge).entry(upper).end_time;
+                    link_struct(edge).entry(k_+1).load = link_struct(edge).entry(upper).load;
+
+                    link_struct(edge).entry(upper).end_time = flow_end_strtime;
+                    link_struct(edge).entry(upper).load = rate + link_struct(edge).entry(upper).load;
+                end
+
+                link_struct(edge).entry(k_+2).start_time = flow_entry.start_time;
+                link_struct(edge).entry(k_+2).end_time = link_struct(edge).entry(lower).end_time;
+                link_struct(edge).entry(k_+2).load = rate +  link_struct(edge).entry(lower).load;
+
+                if strcmp(link_struct(edge).entry(lower).start_time, flow_entry.start_time)
+                    link_struct(edge).entry(lower) = [];
+                else
+                    link_struct(edge).entry(lower).end_time = flow_entry.start_time;
+                end
+            end
+
+            [tmp, ind] = sortrows({link_struct(edge).entry.start_time}');
+            link_struct(edge).entry = link_struct(edge).entry(ind);
+
+            if lower == -1
+                preLower(edge) = length(link_struct(edge).entry);
             else
-                link_struct(edge).entry(lower).end_time = flow_entry.start_time;
+                preLower(edge) = lower;
             end
-        end
-        
-        [tmp, ind] = sortrows({link_struct(edge).entry.start_time}');
-        link_struct(edge).entry = link_struct(edge).entry(ind);
-        
-        if lower == -1
-            preLower(edge) = length(link_struct(edge).entry);
-        else
-            preLower(edge) = lower;
         end
     end
 end
@@ -521,8 +633,8 @@ for i = 1:length(t)
     
     b = bar(x,y);
     
-    title(['Fat Tree, k = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
-    %title(['AS Number = ', int2str(asNum), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
+    %title(['Fat Tree, k = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
+    title(['AS Number = ', int2str(asNum), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
     
     set(gca, 'xtick', (0:1:length(x)+1))
     set(gca, 'ytick', (0:1:max_size))
@@ -547,24 +659,18 @@ t2 = datetime('now');
 disp(t2 - t1)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function flow_entry = setFlowEntryForPerflow(flow_entry, flow_table, i)
-    flow_entry.src_ip = flow_table{i, 'srcip'}{1};
-    flow_entry.dst_ip = flow_table{i,'dstip'}{1};
-    flow_entry.src_port = flow_table{i, 'srcport'};
-    flow_entry.dst_port = flow_table{i, 'dstport'};
-end
 
-function flow_entry = setFlowEntryForCluster(flow_entry, flow_table, i)
+function flow_entry = setFlowEntryForCluster(flow_entry, flow_table, i, group)
     sip = strsplit(flow_table{i, 'srcip'}{1}, '.');
     dip = strsplit(flow_table{i, 'dstip'}{1}, '.');
     
-    if flow_table{i, 'group'} == 1
+    if group == 1
         flow_entry.src_ip = [sip{1}, '.0.0.0'];
         flow_entry.dst_ip = [dip{1}, '.0.0.0'];
-    elseif flow_table{i, 'group'} == 2
+    elseif group == 2
         flow_entry.src_ip = [sip{1}, '.', sip{2}, '.0.0'];
         flow_entry.dst_ip = [dip{1}, '.', dip{2}, '.0.0'];
-    elseif flow_table{i, 'group'} == 3
+    elseif group == 3
         flow_entry.src_ip = [sip{1}, '.', sip{2}, '.', sip{3}, '.0'];
         flow_entry.dst_ip = [dip{1}, '.', dip{2}, '.', dip{3}, '.0'];
     else
@@ -574,102 +680,38 @@ function flow_entry = setFlowEntryForCluster(flow_entry, flow_table, i)
 end
 
 
-function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flow_start_datetime)  
-    global g
-    global link_if
-    global nodeName
-    global sw_struct
+function middleSw = find_middle_sw(sw)
+    global sw_vector
     
-    if sw == findnode(g, dst_name)
-        final_path = [final_path sw];
-        return
-    end
+    middleSw = -1;
     
-    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
-    if ~any(flow_compare)
-        %path = shortestpath(g, nodeName{sw}, dst_name, 'Method', 'positive');
-        
-        flow.src_name = nodeName{sw};
-        
-        path = firstFitFlowScheduling(flow, flow_start_datetime);
-        
-        final_path = [final_path path];
-        path = {nodeName{path}};
-        rows = strcmp(link_if.Src_Node, nodeName{sw}) & strcmp(link_if.Dst_Node, path{2});
-        flow_entry.output = link_if{rows, {'Src_Inf'}};
-        if isempty(sw_struct(sw).entry)
-            sw_struct(sw).entry = flow_entry;
-        else
-            sw_struct(sw).entry(end+1) = flow_entry;
+    j = 1;
+    while true
+        if length(sw) == 1
+            break;
         end
-        installFlowRule(path, flow_entry)
-    else
-        same_flow_loc = find(flow_compare == 1);
-        same_flow_loc = same_flow_loc(end);
-        old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-        new_flow_start_time = datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
         
-        if new_flow_start_time - old_flow_end_time > seconds(60)
-            flow.src_name = nodeName{sw};
+        for m = 1:length(sw)
+            tmp_list{m} = find(ismember(sw_vector(sw(m), :), (1:j)));
+        end
+         
+        for m = 1:length(tmp_list)-1
+            tmp_list{m+1} = intersect(tmp_list{m}, tmp_list{m+1});
+        end
         
-            path = firstFitFlowScheduling(flow, flow_start_datetime);
-            final_path = [final_path path];
-            path = {nodeName{path}};
-            rows = strcmp(link_if.Src_Node, nodeName{sw}) & strcmp(link_if.Dst_Node, path{2});
-            flow_entry.output = link_if{rows, {'Src_Inf'}};
-            sw_struct(sw).entry(end+1) = flow_entry;
-            installFlowRule(path, flow_entry)
+        if ~isempty(tmp_list{m+1})
+            %middleSw = tmp_list{end}(randi(numel(tmp_list{end}),1,1));
+            middleSw = tmp_list{end}(1);
+            break
+        elseif j == max(max(sw_vector(sw, :)))
+            break
         else
-            final_path = [final_path sw];
-            
-            new_flow_end_time = datetime(flow_entry.end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-            sw_struct(sw).entry(same_flow_loc).end_time = datestr(max(old_flow_end_time, new_flow_end_time), 'yyyy-mm-dd HH:MM:ss.FFF');
-            
-            rows = strcmp(link_if.Src_Node, nodeName{sw}) & (link_if.Src_Inf == sw_struct(sw).entry(same_flow_loc).output);
-            sw = findnode(g, link_if{rows, {'Dst_Node'}}{1});
-            flow_entry.input = link_if{rows, {'Dst_Inf'}};
-            
-            final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flow_start_datetime);
-        end
-    end
-end
-function installFlowRule(path, flow_entry)
-    global g
-    global link_if
-    global sw_struct
-    
-    for j = 2:length(path)-1
-        rows = strcmp(link_if.Src_Node, path{j-1}) & strcmp(link_if.Dst_Node, path{j});
-        flow_entry.input = link_if{rows, {'Dst_Inf'}};
-        rows = strcmp(link_if.Src_Node, path{j}) & strcmp(link_if.Dst_Node, path{j+1});
-        flow_entry.output = link_if{rows, {'Src_Inf'}};
-        sw = findnode(g, path{j});
-        flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input) & isequal(flow_entry.output, x.output), sw_struct(sw).entry);
-        if ~any(flow_compare)
-            if isempty(sw_struct(sw).entry)
-                sw_struct(sw).entry = flow_entry;
-            else
-                sw_struct(sw).entry(end+1) = flow_entry;
-            end
-        else
-            same_flow_loc = find(flow_compare == 1);
-            same_flow_loc = same_flow_loc(end);
-            
-            old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-            new_flow_start_time = datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-            
-            if new_flow_start_time - old_flow_end_time > seconds(60)
-                sw_struct(sw).entry(end+1) = flow_entry;
-            else
-                new_flow_end_time = datetime(flow_entry.end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-                sw_struct(sw).entry(same_flow_loc).end_time = datestr(max(old_flow_end_time, new_flow_end_time), 'yyyy-mm-dd HH:MM:ss.FFF');
-            end
-        end
+            j = j + 1;
+        end     
     end
 end
 
-%{
-function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flow_start_datetime)
+function final_path = processPkt(sw, flow_entry, dst_name, final_dst_host, flow, final_path, flow_start_datetime)
     global g
     global link_if
     global host_ip
@@ -677,13 +719,16 @@ function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flo
     global sw_struct
     
     
-    rows = strcmp(link_if.Src_Node, dst_name);
+    rows = strcmp(link_if.Src_Node, final_dst_host);
     if sw == findnode(g, link_if{rows, {'Dst_Node'}}{1})
-        rows = strcmp(host_ip.Host, dst_name);
+        rows = strcmp(host_ip.Host, final_dst_host);
         flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
     end
     
     if sw == findnode(g, dst_name)
+        final_path = [final_path sw];
+        return
+    elseif sw == findnode(g, final_dst_host)
         final_path = [final_path sw];
         return
     end
@@ -706,7 +751,7 @@ function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flo
             sw_struct(sw).entry(end+1) = flow_entry;
         end
 
-        installFlowRule(path, flow_entry, dst_name)
+        installFlowRule(path, flow_entry, final_dst_host)
     else
         same_flow_loc = find(flow_compare == 1);
         same_flow_loc = same_flow_loc(end);
@@ -727,7 +772,7 @@ function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flo
 
             sw_struct(sw).entry(end+1) = flow_entry;
 
-            installFlowRule(path, flow_entry, dst_name)
+            installFlowRule(path, flow_entry, final_dst_host)
         else
             final_path = [final_path sw];
 
@@ -738,12 +783,12 @@ function final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flo
             sw = findnode(g, link_if{rows, {'Dst_Node'}}{1});
             flow_entry.input = link_if{rows, {'Dst_Inf'}};
 
-            final_path = processPkt(sw, flow_entry, dst_name, flow, final_path, flow_start_datetime);
+            final_path = processPkt(sw, flow_entry, dst_name, final_dst_host, flow, final_path, flow_start_datetime);
         end
     end
 end
 
-function installFlowRule(path, flow_entry, dst_name)
+function installFlowRule(path, flow_entry, final_dst_host)
     global g
     global link_if
     global host_ip
@@ -751,8 +796,11 @@ function installFlowRule(path, flow_entry, dst_name)
     
     for j = 2:length(path)-1
         if j == length(path)-1
-            rows = strcmp(host_ip.Host, dst_name);
-            flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+            rows = strcmp(link_if.Src_Node, final_dst_host);
+            if findnode(g, path{j}) == findnode(g, link_if{rows, {'Dst_Node'}}{1})
+                rows = strcmp(host_ip.Host, final_dst_host);
+                flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+            end
         end
     
         rows = strcmp(link_if.Src_Node, path{j-1}) & strcmp(link_if.Dst_Node, path{j});
@@ -786,7 +834,6 @@ function installFlowRule(path, flow_entry, dst_name)
         end
     end
 end
-%}
 
 function path = firstFitFlowScheduling(flow, flow_start_datetime)
     global g
