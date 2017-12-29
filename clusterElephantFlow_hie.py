@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',  
                     datefmt='%a, %d %b %Y %H:%M:%S',  
                     filename='/tmp/test.log',  
-                    filemode='w')  
+                    filemode='w')
 
 def main():
     pd.set_option('expand_frame_repr', False)
@@ -42,9 +42,11 @@ def main():
     
     del result
     
+    ## topo
     k = 4
     edgeSw = (k/2) * k
     host = len(ip_list)
+    ##
 
     edgeSw_host = []
 
@@ -164,7 +166,7 @@ def main():
     elephantFlow.to_csv('elephantFlow_' + str(k) + '.csv', index=False, header=False)
     
     hierarchyFlow.drop(['flow_index'], axis=1, inplace=True)
-    hierarchyFlow.to_csv('hierarchyFlow_' + str(k) + '.csv', index=False, header=False)
+    #hierarchyFlow.to_csv('hierarchyFlow_' + str(k) + '.csv', index=False, header=False)
     #print hierarchyFlow
 
     
