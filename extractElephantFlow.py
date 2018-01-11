@@ -70,6 +70,8 @@ def main():
     thefile = open('pktTrace.txt', 'w')
     for item in pktTrace:
         thefile.write("%s\n" % json.dumps(item))
+    
+    thefile.close()
         
     del pktTrace
     
@@ -86,7 +88,7 @@ def generateAttrFlows(flowSlice):
     index_temp = flowSlice.index[(flowSlice['Timestamp_Shift'] - flowSlice['Timestamp'] > 60)].tolist() 
     index_temp.append(flowSlice.index[-1])
 
-    data = []
+    #data = []
     pkt = []
     startLoc = 0
     for i in range(len(index_temp)):
@@ -141,6 +143,12 @@ def generateAttrFlows(flowSlice):
         del attributeFlow
 
         startLoc = endLoc + 1
+    
+    del startLoc
+    del endLoc
+    
+    del index_temp
+    del flowSlice
     
     return pkt
     

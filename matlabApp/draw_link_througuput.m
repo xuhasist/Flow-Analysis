@@ -16,8 +16,8 @@ function [link_struct, final_network_throuput] = draw_link_througuput(g, link_bw
     title(['Fat Tree, k = ', int2str(k), 10, 'Time Range: ', datestr(begin_time,formatOut), ' ~ ', datestr(end_time,formatOut), 10])
     %title(['AS Number = ', int2str(k), 10, 'Time Range: ', datestr(begin_time,formatOut), ' ~ ', datestr(end_time,formatOut), 10])
     
-    %max_size = max(final_network_throuput);
-    max_size = 42.0324;
+    max_size = max(final_network_throuput);
+    %max_size = 42.0324;
         
     set(gca, 'ylim', [0 max_size])
     set(gca, 'FontSize', 12)
@@ -36,14 +36,18 @@ function [link_struct, final_network_throuput] = byFlowDemand(g, link_bwd_unit, 
         if isempty(link_struct(i).entry)
             continue
         else
+            % if start_time is equalt to end_time, ignore!
             rows = cellfun(@strcmp, {link_struct(i).entry.start_time}, {link_struct(i).entry.end_time});
             link_struct(i).entry(rows) = [];
 
+            % all flow demand greater than link capacity
             rows = [link_struct(i).entry.load]*8 > 10*link_bwd_unit;
 
+            % limit = link capacity / all flow demand
             x = num2cell((10*link_bwd_unit)./ ([link_struct(i).entry(rows).load]*8));
             [link_struct(i).entry(rows).limit] = deal(x{:});
 
+            % transfer strtime to datetime
             x = num2cell(datetime({link_struct(i).entry.start_time}', 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'));
             [link_struct(i).entry.start_time] = deal(x{:});
 
@@ -67,6 +71,7 @@ function [link_struct, final_network_throuput] = byFlowDemand(g, link_bwd_unit, 
         preEnd = preEnd_tmp;
         link_entry_cluster = {};
 
+        % flow on/off in this second
         rows = ((flow_table_start_date_time >= begin_time) & (flow_table_start_date_time < begin_time + seconds(1))) | ((flow_table_end_date_time >= begin_time) & (flow_table_end_date_time <= begin_time + seconds(1)));
 
         if find(rows==1)
@@ -77,6 +82,7 @@ function [link_struct, final_network_throuput] = byFlowDemand(g, link_bwd_unit, 
                 path = flow_final_path{flow_index(i)};
                 path(diff(path)==0) = [];
 
+                % find link between two nodes
                 edge = findedge(g, path, circshift(path, -1));
 
                 for j = 1:length(edge)-1
@@ -107,18 +113,20 @@ function [link_struct, final_network_throuput] = byFlowDemand(g, link_bwd_unit, 
 
                     rows = cellfun(@isempty,rate_array_tmp);
 
+                    % not exceed link capacity, limit = 0
                     x = num2cell(repmat(rate_array(i), 1, length(find(rows==1))));
                     [rate_array_tmp{rows}] = deal(x{:});
 
+                    % exceed link capacity, link not null
                     x = num2cell(rate_array(i) * [rate_array_tmp{~rows}]);
                     [rate_array_tmp{~rows}] = deal(x{:});
 
                     rate_array_tmp = cell2mat(rate_array_tmp);
                     rate_array_tmp = rate_array_tmp.* ration;
-                    tmp_rate = sum(rate_array_tmp);
+                    tmp_rate = sum(rate_array_tmp); % this second, the throughput of this flow in this link
 
                     if tmp_rate < rate_array(i)
-                        rate_array(i) = tmp_rate;
+                        rate_array(i) = tmp_rate; % the current bottleneck link throughput
                     end
                 end
             end

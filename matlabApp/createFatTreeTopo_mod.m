@@ -1,0 +1,150 @@
+function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, IP] = createFatTreeTopo_mod(k, host_x, host_sd)
+    coreSw = (k/2).^2;
+    aggrSw = (k/2) * k;
+    edgeSw = (k/2) * k;
+    
+    nodeCount = zeros(coreSw + aggrSw + edgeSw);
+    nodeName = {};
+
+    sw_number = coreSw + aggrSw + edgeSw;
+    
+    for i = 1:coreSw
+        nodeName{i} = strcat('co-', int2str(i));
+    end
+
+    for i = 1+coreSw:coreSw+aggrSw
+        nodeName{i} = strcat('ag-', int2str(i-(coreSw)));
+    end
+
+    for i = 1+coreSw+aggrSw:coreSw+aggrSw+edgeSw
+        nodeName{i} = strcat('ed-', int2str(i-(coreSw+aggrSw)));
+    end
+
+    g = graph(nodeCount, nodeName);
+    
+    srcNode = {};
+    dstNode = {};
+    srcInf = [];
+    dstInf = [];
+    i = 1;
+    for j = 1:(k/2):coreSw
+        if_aggre = 1;
+
+        for n = j:(j+(k/2))-1
+            if_core = 1;
+
+            for m = i:(k/2):aggrSw
+                g = addedge(g, strcat('co-', int2str(n)), strcat('ag-', int2str(m)), 10);
+
+                srcNode = [srcNode; strcat('co-', int2str(n))];
+                dstNode = [dstNode; strcat('ag-', int2str(m))];
+                srcInf = [srcInf; if_core];
+                dstInf = [dstInf; if_aggre];
+
+                srcNode = [srcNode; strcat('ag-', int2str(m))];
+                dstNode = [dstNode; strcat('co-', int2str(n))];
+                srcInf = [srcInf; if_aggre];
+                dstInf = [dstInf; if_core];
+
+                if_core = if_core + 1;
+            end
+
+            if_aggre = if_aggre + 1;
+        end
+
+        i = i + 1;  
+    end
+
+    for i = 1:(k/2):aggrSw
+        if_edge = 1;
+
+        for j = i:(i+(k/2))-1
+            if_aggre = (k/2)+1;
+
+            for m = i:(i+(k/2))-1
+                g = addedge(g, strcat('ag-', int2str(j)), strcat('ed-', int2str(m)), 10);
+
+                srcNode = [srcNode; strcat('ag-', int2str(j))];
+                dstNode = [dstNode; strcat('ed-', int2str(m))];
+                srcInf = [srcInf; if_aggre];
+                dstInf = [dstInf; if_edge];
+
+                srcNode = [srcNode; strcat('ed-', int2str(m))];
+                dstNode = [dstNode; strcat('ag-', int2str(j))];
+                srcInf = [srcInf; if_edge];
+                dstInf = [dstInf; if_aggre];
+
+                if_aggre = if_aggre + 1;
+            end
+
+            if_edge = if_edge + 1;
+        end
+    end
+    
+    host_range = [host_x-host_sd, host_x+host_sd];
+    
+    host_at_sw(1:edgeSw) = randi(host_range, edgeSw, 1);
+    
+    ip_set = (1:1:edgeSw);
+    
+    %subnet_bin = strcat(dec2bin(128, 8), '.', dec2bin(ip_set, 8), '.', dec2bin(0, 8), '.', dec2bin(0, 8));
+    subnet_bin = strcat(dec2bin(128, 8), dec2bin(ip_set, 8));
+    subnet_bin = cellstr(subnet_bin)';
+    
+    subnet_dec = strcat('128.', int2str(ip_set'), '.0.0');
+    subnet_dec = cellstr(subnet_dec)';
+    
+    edge_subnet = table(g.Nodes.Name(contains(g.Nodes.Name, 'ed-')), subnet_bin', subnet_dec');
+    edge_subnet.Properties.VariableNames = {'Node', 'Subnet_bin', 'Subnet_dec'};
+    
+    IP = {};
+    for i = 1:edgeSw
+        a = randperm(256, host_at_sw(i)) - 1;
+        b = randperm(254, host_at_sw(i));
+        
+        IP = [IP, cellstr(strcat('128.', int2str(ip_set(i)), '.', int2str(a'), '.', int2str(b')))'];
+    end
+        
+    hostNum = sum(host_at_sw);
+    
+    for i = 1:hostNum
+        hostName{i} = strcat('h-', int2str(i));
+    end
+    
+    g = addnode(g, hostName);
+    
+    host_c = 1;
+    for j = 1:edgeSw
+        if_edge = (k/2)+1;
+
+        for n = host_c:(host_c + host_at_sw(j)) - 1            
+            g = addedge(g, strcat('ed-', int2str(j)), strcat('h-', int2str(n)), 10);  
+
+            srcNode = [srcNode; strcat('ed-', int2str(j))];
+            dstNode = [dstNode; strcat('h-', int2str(n))];
+            srcInf = [srcInf; if_edge];
+            dstInf = [dstInf; 1];
+
+            srcNode = [srcNode; strcat('h-', int2str(n))];
+            dstNode = [dstNode; strcat('ed-', int2str(j))];
+            srcInf = [srcInf; 1];
+            dstInf = [dstInf; if_edge];
+
+            if_edge = if_edge + 1;
+        end
+
+        host_c = host_c + host_at_sw(j);
+    end
+    
+    x(1:coreSw) = 1:floor(hostNum/coreSw):floor(hostNum/coreSw)*coreSw;
+    x(1+coreSw:coreSw+aggrSw) = 1:floor(hostNum/aggrSw):floor(hostNum/aggrSw)*aggrSw;
+    x(1+coreSw+aggrSw:coreSw+aggrSw+edgeSw) = 1:floor(hostNum/edgeSw):floor(hostNum/edgeSw)*edgeSw;
+    x(1+coreSw+aggrSw+edgeSw:coreSw+aggrSw+edgeSw+hostNum) = 1:hostNum;
+
+    y(1:coreSw) = 3;
+    y(1+coreSw:coreSw+aggrSw) = 2;
+    y(1+coreSw+aggrSw:coreSw+aggrSw+edgeSw) = 1;
+    y(1+coreSw+aggrSw+edgeSw:coreSw+aggrSw+edgeSw+hostNum) = 0;
+
+    topo = plot(g, 'XData', x, 'YData', y);
+end

@@ -45,8 +45,8 @@ function draw_flow_entry_number(k, sw_struct, sw_number)
 
     formatOut = 'HH:MM';
     begin = 1;
-    %max_size = max(final_mean_size);
-    max_size = 175;
+    max_size = max(final_mean_size);
+    %max_size = 175;
     for i = 1:length(t)
         x = arrayfun(@(x) x+0.5, (1:slot_num(i)));
         y = final_mean_size(begin:begin+slot_num(i)-1);
