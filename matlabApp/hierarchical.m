@@ -6,14 +6,14 @@ function hierarchy_table = hierarchical(g, hierarchy_table, prefix_length, sw_ve
     flow_table_end_date_time = datetime(flow_table.end_date_time(i:end), 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
     
     flow_table_start_index = i;
-    
+
     for i = 1:length(t)
         start_time = t(i,1);
         end_time = t(i,2);
         
-        flowIndex = ((flow_table_start_date_time >= start_time) & (flow_table_start_date_time < end_time)) | ((flow_table_end_date_time >= start_time) & (flow_table_end_date_time <end_time));
+        flowIndex = ((flow_table_start_date_time >= start_time) & (flow_table_start_date_time < end_time)) | ((flow_table_end_date_time >= start_time) & (flow_table_end_date_time < end_time));
         cluster = flow_table(find(flowIndex) + flow_table_start_index - 1, :);
-        
+                
         src_subnet = cluster.srcip;
         src_subnet = cellfun(@(x) strsplit(x, '.'), src_subnet, 'UniformOutput', false);
         src_subnet = cellfun(@(x) strcat(dec2bin(str2num(x{1}), 8), dec2bin(str2num(x{2}), 8)), src_subnet, 'UniformOutput', false);
@@ -55,16 +55,32 @@ function hierarchy_table = hierarchical(g, hierarchy_table, prefix_length, sw_ve
                     middle_src_sw = src_edge_sw_filter;
                 else
                     middle_src_sw = find_middle_sw(src_edge_sw_filter, g, sw_vector);
+                    if middle_src_sw == -1
+                        'QQ'
+                    end
                 end
 
                 if length(dst_edge_sw_filter) == 1
                     middle_dst_sw = dst_edge_sw_filter;
                 else
                     middle_dst_sw = find_middle_sw(dst_edge_sw_filter, g, sw_vector);
+                    if middle_dst_sw == -1
+                        'QQ'
+                    end
                 end
             end
             
             index = flow_subnet_table.flow_index(flow_rows);
+            
+            %{
+            temp = hierarchy_table.middle_src_sw(index);
+            temp = cellfun(@(x) [x, middle_src_sw], temp, 'UniformOutput', false);
+            hierarchy_table.middle_src_sw(index) = temp;
+            
+            temp = hierarchy_table.middle_dst_sw(index);
+            temp = cellfun(@(x) [x, middle_dst_sw], temp, 'UniformOutput', false);
+            hierarchy_table.middle_dst_sw(index) = temp;
+            %}
             
             hierarchy_table.middle_src_sw(index) = {middle_src_sw};
             hierarchy_table.middle_dst_sw(index) = {middle_dst_sw};

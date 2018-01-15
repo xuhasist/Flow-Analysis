@@ -6,12 +6,12 @@ host_sd = 3;
 
 % fat tree
 %k = 4;
-%[sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, IP] = ...
+%[sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, host_at_sw, hostNum, IP] = ...
 %    createFatTreeTopo_mod(k, host_x, host_sd);
 
 % AS_topo
 as_edge_sw_num = 5;
-[sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_subnet, hostNum, IP] = ...
+[sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_subnet, host_at_sw, hostNum, IP] = ...
     createAsTopo_mod(as_edge_sw_num, host_x, host_sd);
 
 flowNum = 2000;
@@ -30,8 +30,6 @@ flow_final_path = {};
 preLower = [];
 
 hierarchy_table = table();
-hierarchy_table.middle_src_sw = repmat({[]}, size(flow_table, 1), 1);
-hierarchy_table.middle_dst_sw = repmat({[]}, size(flow_table, 1), 1);
 
 prefix_length = 16; %bits
 prefix_threshold = 16;
@@ -116,14 +114,14 @@ for i = 1:size(flow_table, 1)
         prefix_length = prefix_length - 1;
         
         if prefix_length < prefix_threshold
-            hierarchy_table.middle_src_sw = repmat({[]}, size(flow_table, 1), 1);
-            hierarchy_table.middle_dst_sw = repmat({[]}, size(flow_table, 1), 1);
+            hierarchy_table.middle_src_sw = repmat({{}}, size(flow_table, 1), 1);
+            hierarchy_table.middle_dst_sw = repmat({{}}, size(flow_table, 1), 1);
             hierarchy_table = hierarchical(g, hierarchy_table, prefix_length, sw_vector, host_ip, link_if, flow_table, i+1);
             has_hierarchy = true;
+        else
+            flow_table.group = repmat({[]}, size(flow_table, 1), 1);
+            flow_table = simularityClustering(prefix_length, host_ip, link_if, flow_table, i+1);
         end
-        
-        flow_table.group = repmat({[]}, size(flow_table, 1), 1);
-        flow_table = simularityClustering(prefix_length, host_ip, link_if, flow_table, i+1);
         
         updatePrefixLength = false;
     end

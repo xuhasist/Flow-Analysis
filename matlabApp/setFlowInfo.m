@@ -13,12 +13,15 @@ function [src_name, dst_name, flow_start_datetime, flow_end_datetime, flow_start
     
     flow_entry_end_strtime = datestr(flow_end_datetime + seconds(60), 'yyyy-mm-dd HH:MM:ss.FFF');
     
+    % flow demand
     %duration = seconds(flow_end_datetime - flow_start_datetime);
     %rate = flow_table{i, 'bytes'} / duration;
-    rate = (10 * link_bwd_unit) / 8;  % ?KB/s
+    
+    % saturation
+    rate = (10 * link_bwd_unit) / 8;  % ?B/s
 
     flow.rate = rate;
-    flow_table.rate_bps(i) = rate*8;
+    flow_table.rate_bps(i) = rate * 8;
 
     flow_entry = struct();
     flow_entry.start_time = flow_start_strtime;

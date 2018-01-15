@@ -36,10 +36,13 @@ function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVaria
         start_date_time = pkt_trace.start_date_time;
         end_date_time = pkt_trace.end_date_time;
         
+        % case 1: pick src & dst ip randomly
         %node = randperm(length(IP), 2);
         %srcip = IP{node(1)};
         %dstip = IP{node(2)};
         
+        % case 2: pick src ip from first third of all ip and dst ip from
+        % last two thirds of all ip randomly
         srcip = IP{randi(length(IP(1:floor(length(IP)/3))), 1)};
         dstip = IP{randi(length(IP(floor(length(IP)/3)+1:end)), 1)};
         
@@ -53,6 +56,64 @@ function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVaria
     
     flow_table.Properties.VariableNames = {'start_date_time', 'end_date_time', 'srcip', 'dstip', 'srcport', 'dstport', 'protocol', 'bytes'};
     flow_table = sortrows(flow_table, 'start_date_time');
+    
+    clearvars all_pkt_trace
+    
+    
+    DateStrings = {'2009-12-18 00:26', '2009-12-18 00:48'; '2009-12-18 00:48', '2009-12-18 01:10'; '2009-12-18 01:10', '2009-12-18 01:32'};
+    t = datetime(DateStrings,'InputFormat','yyyy-MM-dd HH:mm');
+    
+    flow_table_start_date_time = datetime(flow_table.start_date_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+    flow_table_end_date_time = datetime(flow_table.end_date_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+    
+    index = [];
+    for i = 1:length(t)
+        start_time = t(i,1);
+        end_time = t(i,2);
+
+        flowIndex = ((flow_table_start_date_time >= start_time) & (flow_table_start_date_time < end_time)) & ((flow_table_end_date_time >= start_time) & (flow_table_end_date_time <= end_time));
+        index = [index, find(flowIndex)'];
+    end
+    
+    a = (1:size(flow_table, 1));
+    rows = ismember(a', index', 'rows');
+    index = a(~rows);
+    
+    for i = 1:length(index)
+        flow_start_time = flow_table_start_date_time(index(i));
+        flow_end_time = flow_table_end_date_time(index(i));
+        
+        s = -1;
+        e = -1;
+        
+        for j = 1:length(t)
+            start_time = t(j,1);
+            end_time = t(j,2);
+            
+            if (flow_start_time >= start_time) && (flow_start_time < end_time)
+                s = j;
+            end
+            
+            if (flow_end_time >= start_time) && (flow_end_time < end_time)
+                e = j;
+            end
+            
+            if s == -1
+                continue;
+            elseif s == j
+                flow_table = [flow_table; {flow_table.start_date_time(index(i)), datestr(end_time - seconds(0.001), 'yyyy-mm-dd HH:MM:ss.FFF'), flow_table.srcip(index(i)), flow_table.dstip(index(i)), flow_table.srcport(index(i)), flow_table.dstport(index(i)), flow_table.protocol(index(i)), flow_table.bytes(index(i))}];
+            elseif s ~= j && e ~= j
+                flow_table = [flow_table; {datestr(start_time, 'yyyy-mm-dd HH:MM:ss.FFF'), datestr(end_time - seconds(0.001), 'yyyy-mm-dd HH:MM:ss.FFF'), flow_table.srcip(index(i)), flow_table.dstip(index(i)), flow_table.srcport(index(i)), flow_table.dstport(index(i)), flow_table.protocol(index(i)), flow_table.bytes(index(i))}];
+            elseif e == j
+                flow_table = [flow_table; {datestr(start_time, 'yyyy-mm-dd HH:MM:ss.FFF'), flow_table.end_date_time(index(i)), flow_table.srcip(index(i)), flow_table.dstip(index(i)), flow_table.srcport(index(i)), flow_table.dstport(index(i)), flow_table.protocol(index(i)), flow_table.bytes(index(i))}];
+                break;
+            end
+        end
+    end
+    
+    flow_table(index,:) = [];
+    flow_table = sortrows(flow_table, 'start_date_time');
+    
     
     %{
     [start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes, group, hie_index, srcEdgeSw, dstEdgeSw, group2] = textread('elephantFlow_4.csv', '%s%s%s%s%d%d%s%d%d%d%d%d%d', 'delimiter', ',');

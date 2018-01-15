@@ -15,6 +15,9 @@ function flow_entry = setFlowEntry(prefix_length, flow_entry, flow_table, i)
     flow_entry.src_ip = [num2str(bin2dec(sip(1:8))), '.', num2str(bin2dec(sip(9:16))), '.', num2str(bin2dec(sip(17:24))), '.', num2str(bin2dec(sip(25:32)))];
     flow_entry.dst_ip = [num2str(bin2dec(dip(1:8))), '.', num2str(bin2dec(dip(9:16))), '.', num2str(bin2dec(dip(17:24))), '.', num2str(bin2dec(dip(25:32)))];
     
+    %flow_entry.src_ip = sip(1:prefix_length);
+    %flow_entry.dst_ip = dip(1:prefix_length);
+    
     flow_entry.src_port = 0;
     flow_entry.dst_port = 0;
     

@@ -1,9 +1,9 @@
-function flow_table = simularityClustering(prefix_length, host_ip, link_if, flow_table, i)
+function pkt_table = simularityClustering_pkt(prefix_length, host_ip, link_if, pkt_table, i)
     DateStrings = {'2009-12-18 00:26', '2009-12-18 00:48'; '2009-12-18 00:48', '2009-12-18 01:10'; '2009-12-18 01:10', '2009-12-18 01:32'};
     t = datetime(DateStrings,'InputFormat','yyyy-MM-dd HH:mm');
     
-    flow_table_start_date_time = datetime(flow_table.start_date_time(i:end), 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-    flow_table_end_date_time = datetime(flow_table.end_date_time(i:end), 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+    flow_table_start_date_time = datetime(pkt_table.start_date_time(i:end), 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+    %flow_table_end_date_time = datetime(pkt_table.end_date_time(i:end), 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
     
     flow_table_start_index = i;
     
@@ -11,8 +11,14 @@ function flow_table = simularityClustering(prefix_length, host_ip, link_if, flow
         start_time = t(i,1);
         end_time = t(i,2);
 
-        flowIndex = ((flow_table_start_date_time >= start_time) & (flow_table_start_date_time < end_time)) | ((flow_table_end_date_time >= start_time) & (flow_table_end_date_time < end_time));
-        cluster = flow_table(find(flowIndex) + flow_table_start_index - 1, :);
+        flowIndex = (flow_table_start_date_time >= start_time) & (flow_table_start_date_time < end_time);
+        cluster = pkt_table(find(flowIndex) + flow_table_start_index - 1, :);
+        
+        %{
+        a = [cluster.srcip, cluster.dstip];
+        a = unique(cell2table(a));
+        a = table2cell(a);
+        %}
         
         src_subnet = cluster.srcip;
         src_subnet = cellfun(@(x) strsplit(x, '.'), src_subnet, 'UniformOutput', false);
@@ -54,10 +60,10 @@ function flow_table = simularityClustering(prefix_length, host_ip, link_if, flow
                 continue
             else
                 index = flow_subnet_table.flow_index(flow_rows);
-                temp = flow_table.group(index);
+                temp = pkt_table.group(index);
                 temp = cellfun(@(x) [x group_index], temp, 'UniformOutput', false);
                 
-                flow_table.group(index) = temp;
+                pkt_table.group(index) = temp;
                 group_index = group_index + 1;
             end
         end

@@ -15,7 +15,8 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
     end
 
     sw = findnode(g, src_edge_sw);
-    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);    
+    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
+    %flow_compare = arrayfun(@(x) startsWith(x.src_ip, flow_entry.src_ip) & startsWith(x.dst_ip, flow_entry.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
     
     if ~any(flow_compare)
         flow.src_name = src_edge_sw;
@@ -34,9 +35,9 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
             sw_struct(sw).entry(end+1) = flow_entry;
         end
 
-        [sw_struct] = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name);
+        sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name);
     else
-        same_flow_loc = find(flow_compare == 1);
+        same_flow_loc = find(flow_compare);
         same_flow_loc = same_flow_loc(end);
 
         old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
@@ -55,7 +56,7 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
 
             sw_struct(sw).entry(end+1) = flow_entry;
 
-            [sw_struct] = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name);
+            sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name);
         else
             final_path = [final_path sw];
 
@@ -71,7 +72,7 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
     end
 end
 
-function [sw_struct] = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name)
+function sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name)
     for j = 2:length(path)-1    
         rows = strcmp(link_if.Src_Node, path{j-1}) & strcmp(link_if.Dst_Node, path{j});
         flow_entry.input = link_if{rows, {'Dst_Inf'}};
@@ -82,7 +83,8 @@ function [sw_struct] = installFlowRule(g, path, link_if, host_ip, sw_struct, flo
         sw = findnode(g, path{j});
 
         flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input) & isequal(flow_entry.output, x.output), sw_struct(sw).entry);
-       
+        %flow_compare_ = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
+        
         if ~any(flow_compare)
             if isempty(sw_struct(sw).entry)
                 sw_struct(sw).entry = flow_entry;
@@ -90,7 +92,7 @@ function [sw_struct] = installFlowRule(g, path, link_if, host_ip, sw_struct, flo
                 sw_struct(sw).entry(end+1) = flow_entry;
             end
         else
-            same_flow_loc = find(flow_compare == 1);
+            same_flow_loc = find(flow_compare);
             same_flow_loc = same_flow_loc(end);
             
             old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
@@ -117,7 +119,7 @@ end
 
 function sw_struct = installLastEdgeSwFlowRule(g, link_if, sw_struct, flow_entry, dst_edge_sw, dst_name)
     sw = findnode(g, dst_edge_sw);
-    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);    
+    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
     
     if ~any(flow_compare)
         rows = strcmp(link_if.Src_Node, dst_edge_sw) & strcmp(link_if.Dst_Node, dst_name);
@@ -129,7 +131,7 @@ function sw_struct = installLastEdgeSwFlowRule(g, link_if, sw_struct, flow_entry
             sw_struct(sw).entry(end+1) = flow_entry;
         end
     else
-        same_flow_loc = find(flow_compare == 1);
+        same_flow_loc = find(flow_compare);
         same_flow_loc = same_flow_loc(end);
 
         old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
@@ -169,11 +171,11 @@ function [path, link] = firstFitFlowScheduling(g, link, link_bwd_unit, preLower,
         
         [val, loc] = min(link{pathIndex,'Load'});
         if val < bottleneckLinkLoad || bottleneckLinkLoad == -1
-            bottleneckLinkLoad = link.Load(pathIndex(loc));
-            bottleneckLinkLoad = bottleneckLinkLoad * 8;
+            bottleneckLinkLoad = link.Load(pathIndex(loc)); %Bytes
+            bottleneckLinkLoad = bottleneckLinkLoad * 8; %bits
             
             bottleneckLinkWeight = link.Weight(pathIndex(loc));
-            bottleneckLinkWeight = bottleneckLinkWeight * link_bwd_unit;
+            bottleneckLinkWeight = bottleneckLinkWeight * link_bwd_unit; %10Kbps
         end
         
         congest = bottleneckLinkLoad / bottleneckLinkWeight;

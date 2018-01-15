@@ -1,4 +1,4 @@
-function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, IP] = createFatTreeTopo_mod(k, host_x, host_sd)
+function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, host_at_sw, hostNum, IP] = createFatTreeTopo_mod(k, host_x, host_sd)
     coreSw = (k/2).^2;
     aggrSw = (k/2) * k;
     edgeSw = (k/2) * k;
@@ -26,14 +26,19 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, 
     dstNode = {};
     srcInf = [];
     dstInf = [];
+    
+    % coreSw 1 -> aggreSw 1, 3, 5, 7
+    % coreSw 2 -> aggreSw 1, 3, 5, 7
+    % coreSw 3 -> aggreSw 2, 4, 6, 8
+    % coreSw 4 -> aggreSw 2, 4, 6, 8
     i = 1;
-    for j = 1:(k/2):coreSw
+    for j = 1:(k/2):coreSw % control core switch
         if_aggre = 1;
 
-        for n = j:(j+(k/2))-1
+        for n = j:(j+(k/2))-1 % control core switch
             if_core = 1;
 
-            for m = i:(k/2):aggrSw
+            for m = i:(k/2):aggrSw % control aggre switch
                 g = addedge(g, strcat('co-', int2str(n)), strcat('ag-', int2str(m)), 10);
 
                 srcNode = [srcNode; strcat('co-', int2str(n))];
@@ -55,13 +60,17 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, 
         i = i + 1;  
     end
 
-    for i = 1:(k/2):aggrSw
+    % aggreSw 1 -> edgeSw 1, 2
+    % aggreSw 2 -> edgeSw 1, 2
+    % aggreSw 3 -> edgeSw 3, 4
+    % aggreSw 4 -> edgeSw 3, 4
+    for i = 1:(k/2):aggrSw % control aggre switch
         if_edge = 1;
 
-        for j = i:(i+(k/2))-1
+        for j = i:(i+(k/2))-1 % control aggre switch
             if_aggre = (k/2)+1;
 
-            for m = i:(i+(k/2))-1
+            for m = i:(i+(k/2))-1 % control edge switch
                 g = addedge(g, strcat('ag-', int2str(j)), strcat('ed-', int2str(m)), 10);
 
                 srcNode = [srcNode; strcat('ag-', int2str(j))];
@@ -99,8 +108,8 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, 
     
     IP = {};
     for i = 1:edgeSw
-        a = randperm(256, host_at_sw(i)) - 1;
-        b = randperm(254, host_at_sw(i));
+        a = randperm(256, host_at_sw(i)) - 1; % 0~255
+        b = randperm(254, host_at_sw(i)); % 1~254
         
         IP = [IP, cellstr(strcat('128.', int2str(ip_set(i)), '.', int2str(a'), '.', int2str(b')))'];
     end
@@ -113,11 +122,13 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, edge_subnet, hostNum, 
     
     g = addnode(g, hostName);
     
+    % edgeSw 1 -> hosts under edgeSw 1
+    % edgeSw 2 -> hosts under edgeSw 2
     host_c = 1;
-    for j = 1:edgeSw
+    for j = 1:edgeSw % control edge switch
         if_edge = (k/2)+1;
 
-        for n = host_c:(host_c + host_at_sw(j)) - 1            
+        for n = host_c:(host_c + host_at_sw(j)) - 1 % control host            
             g = addedge(g, strcat('ed-', int2str(j)), strcat('h-', int2str(n)), 10);  
 
             srcNode = [srcNode; strcat('ed-', int2str(j))];

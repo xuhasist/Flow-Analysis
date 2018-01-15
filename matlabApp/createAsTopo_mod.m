@@ -1,4 +1,4 @@
-function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_subnet, hostNum, IP] = createAsTopo_mod(as_edge_sw_num, host_x, host_sd)
+function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_subnet, host_at_sw, hostNum, IP] = createAsTopo_mod(as_edge_sw_num, host_x, host_sd)
     topoInfo = textread('as.brite', '%s', 'delimiter', '\n');
     token = strsplit(topoInfo{1}, ' ');
 
@@ -15,7 +15,8 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_sub
     end
 
     g = graph(nodeCount, nodeName);
-    g_ = graph(zeros(swNum), nodeName(1:swNum));
+    %g_ = graph(zeros(swNum), nodeName(1:swNum));
+    g_ = graph(nodeCount, nodeName);
 
     token = strsplit(topoInfo{7}, '\t');
     startNodeInd = str2double(token{1});
@@ -47,8 +48,8 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_sub
         srcInf = [srcInf; if_temp(node2)];
         dstInf = [dstInf; if_temp(node1)];
 
-        if_temp(node2) = if_temp(node2) + 1;
         if_temp(node1) = if_temp(node1) + 1;
+        if_temp(node2) = if_temp(node2) + 1;
     end
 
     as = [];
@@ -81,7 +82,7 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_sub
         
         green_nodes = [green_nodes edge_sw'];
         
-        x = (i-1)*20+1;
+        x = (i-1)*20+1; % 1, 21, 31, 41 ...
         ip_set = (x:1:x+as_edge_sw_num-1);
         sub_ip = dec2bin(ip_set, 8);
         sub_ip = strcat(dec2bin(128, 8), sub_ip);
@@ -98,7 +99,7 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_sub
         end
     end
     
-    hostNum = sum(host_at_sw(host_at_sw>0));
+    hostNum = sum(host_at_sw);
     
     for i = 1:hostNum
         hostName{i} = strcat('h-', int2str(i));
