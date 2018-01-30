@@ -1,5 +1,6 @@
 function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_subnet, host_at_sw, hostNum, IP] = createAsTopo_mod(as_edge_sw_num, host_x, host_sd)
     topoInfo = textread('as.brite', '%s', 'delimiter', '\n');
+    %topoInfo = textread('123.brite', '%s', 'delimiter', '\n');
     token = strsplit(topoInfo{1}, ' ');
 
     swNum = str2double(token{3});
@@ -131,7 +132,8 @@ function [sw_number, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeT, edge_sub
     end
 
     x_axis_start = 1;
-    %y_axis = [3, 1, 5, 2, 4];
+    %y_axis = [3, 1, 2, 4];
+    %y_axis_shift = [20, 30, 10, 40, 1];
     y_axis = [19, 17, 15, 13, 11, 9, 7, 5, 3, 1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
     y_axis_shift = [20, 30, 10, 40, 1, 30, 10, 20];
     for i = 1:asNum

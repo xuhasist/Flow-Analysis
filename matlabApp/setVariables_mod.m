@@ -1,4 +1,4 @@
-function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVariables_mod(sw_number, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum)
+function [link_if, host_ip, sw_struct, link, link_struct, flow_table, sequence] = setVariables_mod(sw_number, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum)
     link_if = table(srcNode, dstNode, srcInf, dstInf);
     link_if.Properties.VariableNames = {'Src_Node', 'Dst_Node', 'Src_Inf', 'Dst_Inf'};
     
@@ -23,18 +23,26 @@ function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVaria
         link_struct(i).entry = struct([]);
     end
 
-    all_pkt_trace = textread('pktTrace.txt', '%s', 'delimiter', '\n', 'bufsize', 2147483647);
+    all_pkt_trace = textread('pktTrace_old.txt', '%s', 'delimiter', '\n', 'bufsize', 2147483647);
     
     packTraceNum = length(all_pkt_trace);
     pick_packTrace = randi(packTraceNum, 1, flowNum);
+    %pick_packTrace = pick_packTrace_temp;
+    
+    start_time = datetime('2009-12-18 00:26', 'InputFormat', 'yyyy-MM-dd HH:mm');
+    end_time = datetime('2009-12-18 01:32', 'InputFormat', 'yyyy-MM-dd HH:mm');
+    slot_num = minutes(end_time - start_time);
+    sequence = []; % all flow sequence
     
     flow_table = table();
     for i = 1:flowNum
         pkt_trace = all_pkt_trace{pick_packTrace(i)};
         pkt_trace = jsondecode(pkt_trace);
         
-        start_date_time = pkt_trace.start_date_time;
-        end_date_time = pkt_trace.end_date_time;
+        sequence(i,:) = zeros(slot_num, 1);
+        pkt_datetime = datetime({pkt_trace.send.time}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+        loc = floor(minutes(pkt_datetime - start_time)) + 1;
+        sequence(i, loc) = 1;
         
         % case 1: pick src & dst ip randomly
         %node = randperm(length(IP), 2);
@@ -49,17 +57,45 @@ function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVaria
         srcport = pkt_trace.attr.src_port;
         dstport = pkt_trace.attr.dst_port;
         protocol = pkt_trace.attr.protocol;
-        bytes = pkt_trace.attr.transferred_bytes;
         
-        flow_table = [flow_table; {start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes}];
+        rows = seconds(pkt_datetime - circshift(pkt_datetime,1)) > 60;
+        if any(rows)
+            s = 1;
+            new_flow_index = find(rows);
+            for j = 1:length(new_flow_index)
+                e = new_flow_index(j) - 1;
+                
+                start_date_time = pkt_trace.send(s).time;
+                end_date_time = pkt_trace.send(e).time;
+                bytes = sum([pkt_trace.send(s:e).size]);
+                
+                flow_table = [flow_table; {i, start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes}];
+                
+                s = new_flow_index(j);
+            end
+            
+            start_date_time = pkt_trace.send(s).time;
+            end_date_time = pkt_trace.end_date_time;
+            bytes = sum([pkt_trace.send(s:end).size]);
+
+            flow_table = [flow_table; {i, start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes}];
+
+        else
+            start_date_time = pkt_trace.start_date_time;
+            end_date_time = pkt_trace.end_date_time;
+
+            bytes = pkt_trace.attr.transferred_bytes;
+
+            flow_table = [flow_table; {i, start_date_time, end_date_time, srcip, dstip, srcport, dstport, protocol, bytes}];
+        end
     end
     
-    flow_table.Properties.VariableNames = {'start_date_time', 'end_date_time', 'srcip', 'dstip', 'srcport', 'dstport', 'protocol', 'bytes'};
+    flow_table.Properties.VariableNames = {'index', 'start_date_time', 'end_date_time', 'srcip', 'dstip', 'srcport', 'dstport', 'protocol', 'bytes'};
     flow_table = sortrows(flow_table, 'start_date_time');
     
     clearvars all_pkt_trace
     
-    
+    %{
     DateStrings = {'2009-12-18 00:26', '2009-12-18 00:48'; '2009-12-18 00:48', '2009-12-18 01:10'; '2009-12-18 01:10', '2009-12-18 01:32'};
     t = datetime(DateStrings,'InputFormat','yyyy-MM-dd HH:mm');
     
@@ -113,6 +149,8 @@ function [link_if, host_ip, sw_struct, link, link_struct, flow_table] = setVaria
     
     flow_table(index,:) = [];
     flow_table = sortrows(flow_table, 'start_date_time');
+    %}
+    
     
     
     %{

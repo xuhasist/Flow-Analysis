@@ -54,8 +54,8 @@ function draw_flow_entry_number(k, sw_struct, sw_number)
 
         b = bar(x, y);
 
-        title(['Fat Tree, k = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
-        %title(['AS Number = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
+        %title(['Fat Tree, k = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
+        title(['AS Number = ', int2str(k), 10, 'Time Range: ', datestr(t(i,1),formatOut), ' ~ ', datestr(t(i,2),formatOut), 10])
 
         set(gca, 'ylim', [0 max_size])
         set(gca, 'FontSize', 12)

@@ -18,7 +18,7 @@ function [src_name, dst_name, flow_start_datetime, flow_end_datetime, flow_start
     %rate = flow_table{i, 'bytes'} / duration;
     
     % saturation
-    rate = (10 * link_bwd_unit) / 8;  % ?B/s
+    rate = (10 * link_bwd_unit) / 8; % ?B/s
 
     flow.rate = rate;
     flow_table.rate_bps(i) = rate * 8;
@@ -26,5 +26,6 @@ function [src_name, dst_name, flow_start_datetime, flow_end_datetime, flow_start
     flow_entry = struct();
     flow_entry.start_time = flow_start_strtime;
     flow_entry.end_time = flow_entry_end_strtime;
+    %flow_entry.end_time = flow_end_strtime;
     flow_entry.protocol = flow_table{i, 'protocol'}{1};
 end

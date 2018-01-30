@@ -3,7 +3,14 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
         rows = strcmp(link_if.Src_Node, dst_name);
         if strcmp(dst_edge_sw, link_if{rows, {'Dst_Node'}}{1})
             rows = strcmp(host_ip.Host, dst_name);
-            flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+            
+            dip = strsplit(host_ip{rows, {'IP'}}{1}, '.');
+            dip = cellfun(@(x) str2num(x), dip);
+            dip = dec2bin(dip, 8);
+            dip = dip';
+
+            %flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+            flow_entry.dst_ip = dip(1:32);
             
             sw_struct = installLastEdgeSwFlowRule(g, link_if, sw_struct, flow_entry, dst_edge_sw, dst_name);
             final_path = [final_path findnode(g, dst_edge_sw);];
@@ -13,10 +20,16 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
             return
         end
     end
+    
+    if length(final_path) >= 20
+        'QQ'
+    end
 
     sw = findnode(g, src_edge_sw);
-    flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
-    %flow_compare = arrayfun(@(x) startsWith(x.src_ip, flow_entry.src_ip) & startsWith(x.dst_ip, flow_entry.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
+    
+    % prefix more long, flow entry priority more high
+    %flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
+    flow_compare = arrayfun(@(x) startsWith(flow_entry.src_ip, x.src_ip) & startsWith(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input) & datetime(x.end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS') >= datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS'), sw_struct(sw).entry);
     
     if ~any(flow_compare)
         flow.src_name = src_edge_sw;
@@ -38,12 +51,19 @@ function [final_path, sw_struct, link] = processPkt_mod(g, link, link_bwd_unit, 
         sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_entry, dst_name);
     else
         same_flow_loc = find(flow_compare);
-        same_flow_loc = same_flow_loc(end);
+        rows = datetime({sw_struct(sw).entry(same_flow_loc).end_time}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS') >= datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+        same_flow_loc = same_flow_loc(rows);
+        
+        rows = arrayfun(@(x) length(x.src_ip), sw_struct(sw).entry(same_flow_loc));
+        max_loc = find(rows == max(rows));
+        same_flow_loc = same_flow_loc(max_loc(end));
+        %same_flow_loc = same_flow_loc(end);
 
         old_flow_end_time = datetime(sw_struct(sw).entry(same_flow_loc).end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
         new_flow_start_time = datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
 
         if new_flow_start_time - old_flow_end_time > seconds(60)
+        %if new_flow_start_time > old_flow_end_time
             flow.src_name = src_edge_sw;
 
             [path, link] = firstFitFlowScheduling(g, link, link_bwd_unit, preLower, link_struct, flow, flow_start_datetime);
@@ -83,7 +103,6 @@ function sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_
         sw = findnode(g, path{j});
 
         flow_compare = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input) & isequal(flow_entry.output, x.output), sw_struct(sw).entry);
-        %flow_compare_ = arrayfun(@(x) isequal(flow_entry.src_ip, x.src_ip) & isequal(flow_entry.dst_ip, x.dst_ip) & isequal(flow_entry.src_port, x.src_port) & isequal(flow_entry.dst_port, x.dst_port) & isequal(flow_entry.protocol, x.protocol) & isequal(flow_entry.input, x.input), sw_struct(sw).entry);
         
         if ~any(flow_compare)
             if isempty(sw_struct(sw).entry)
@@ -99,6 +118,7 @@ function sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_
             new_flow_start_time = datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
             
             if new_flow_start_time - old_flow_end_time > seconds(60)
+            %if new_flow_start_time > old_flow_end_time
                 sw_struct(sw).entry(end+1) = flow_entry;
             else
                 new_flow_end_time = datetime(flow_entry.end_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
@@ -110,7 +130,14 @@ function sw_struct = installFlowRule(g, path, link_if, host_ip, sw_struct, flow_
     rows = strcmp(link_if.Src_Node, dst_name);
     if strcmp(path{end}, link_if{rows, {'Dst_Node'}}{1})
         rows = strcmp(host_ip.Host, dst_name);
-        flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+        
+        dip = strsplit(host_ip{rows, {'IP'}}{1}, '.');
+        dip = cellfun(@(x) str2num(x), dip);
+        dip = dec2bin(dip, 8);
+        dip = dip';
+
+        %flow_entry.dst_ip = host_ip{rows, {'IP'}}{1};
+        flow_entry.dst_ip = dip(1:32);
 
         dst_edge_sw = path{end};
         sw_struct = installLastEdgeSwFlowRule(g, link_if, sw_struct, flow_entry, dst_edge_sw, dst_name);
@@ -138,6 +165,7 @@ function sw_struct = installLastEdgeSwFlowRule(g, link_if, sw_struct, flow_entry
         new_flow_start_time = datetime(flow_entry.start_time, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
 
         if new_flow_start_time - old_flow_end_time > seconds(60)
+        %if new_flow_start_time > old_flow_end_time
             rows = strcmp(link_if.Src_Node, dst_edge_sw) & strcmp(link_if.Dst_Node, dst_name);
             flow_entry.output = link_if{rows, {'Src_Inf'}};
 
