@@ -95,7 +95,8 @@ function [swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP] = ...
     hostRange = [hostAvg-hostSd, hostAvg+hostSd];
     hostAtSw(1:edgeSw) = randi(hostRange, edgeSw, 1);
     
-    ipSet = (1:edgeSw);
+    %ipSet = (1:edgeSw);
+    ipSet = randperm(32, 8);
     
     %subnetBin = strcat(dec2bin(128, 8), dec2bin(ipSet, 8));
     %subnetBin = cellstr(subnetBin)';

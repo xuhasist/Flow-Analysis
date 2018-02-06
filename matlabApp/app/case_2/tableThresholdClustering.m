@@ -2,14 +2,16 @@ clearvars -except
 
 t1 = datetime('now');
 
+global currentFlowTime
+
 hostAvg = 50;
 hostSd = 5;
     
 flowNum = 5000;
 
 linkBwdUnit = 10^3; %10Kbps
-startPrefixLength = 9;
-x_axis = startPrefixLength:32;
+startTableThreshold = 50;
+x_axis = startTableThreshold:25:500;
 
 allRound_y_axis_flowTableSize = [];
 allRound_y_axis_networkThroughput = [];
@@ -55,39 +57,51 @@ for frequency = 1:20
 
     y_axis_flowTableSize = [];
     y_axis_networkThroughput = [];
-
-    for pl = startPrefixLength:32
+    doHierarchyCount_list = [];
+    
+    for tableThreshold = startTableThreshold:25:500
         swFlowEntryStruct = swFlowEntryStruct_empty;
         linkTable = linkTable_empty;
         linkThputStruct = linkThputStruct_empty;
         
         eachFlowFinalPath = {};
         linkPreLower = [];
-        needDohierarchy = false;    
-
-        if pl < 16
-            original_pl = pl;
-            pl = 16;
-            
-            needDohierarchy = true;
-        end
-    
-        flowTraceTable.Group = repmat(-1, size(flowTraceTable, 1), 1);
-        flowTraceTable = simularityClustering_fixedPrefix(pl, flowTraceTable, flowSequence);
+        needDohierarchy = false;
+        doHierarchyCount = 0;
         
-        if needDohierarchy
-            flowTraceTable.HierarchicalGroup = zeros(size(flowTraceTable, 1), 1);
-            flowTraceTable.MiddleSrcSw = repmat({{}}, size(flowTraceTable, 1), 1);
-            flowTraceTable.MiddleDstSw = repmat({{}}, size(flowTraceTable, 1), 1);
-            
-            flowTraceTable = hierarchicalClustering_fixedPrefix(original_pl, g, swDistanceVector, hostIpTable, swInfTable, flowTraceTable);
-        end
-
+        flowTraceTable.Group = repmat(-1, size(flowTraceTable, 1), 1);
+        flowTraceTable.Prefix = repmat(16, size(flowTraceTable, 1), 1);
+        flowTraceTable.HierarchicalGroup = zeros(size(flowTraceTable, 1), 1);
+        flowTraceTable.MiddleSrcSw = repmat({{}}, size(flowTraceTable, 1), 1);
+        flowTraceTable.MiddleDstSw = repmat({{}}, size(flowTraceTable, 1), 1);
+        flowTraceTable.HierarchicalPrefix = zeros(size(flowTraceTable, 1), 1);
+        
+        flowTraceTable = simularityClustering_tableThreshold(g, hostIpTable, swInfTable, flowTraceTable, flowSequence);
+        
+        preCheckTableTime = datetime(flowTraceTable{1, 'StartDatetime'}{1}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
         for i = 1:size(flowTraceTable, 1)
             i
+            
             [srcNodeName, dstNodeName, flowStartStrtime, flowEndStrtime, flowRate, flowTraceTable, flowEntry] = ...
                 setFlowInfo(flowStartDatetime(i), flowEndDatetime(i), linkBwdUnit, hostIpTable, flowTraceTable, i);
-
+            
+            currentFlowTime = flowStartDatetime(i);
+    
+            if currentFlowTime - preCheckTableTime >= seconds(60)
+                [needDohierarchy, swWithTooManyFlowEntry] = ...
+                    checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy);
+                
+                preCheckTableTime = currentFlowTime;
+            end
+            
+            if needDohierarchy
+                doHierarchyCount = doHierarchyCount + 1;
+                flowTraceTable = hierarchicalClustering_tableThreshold(tableThreshold, swWithTooManyFlowEntry, g, swDistanceVector, hostIpTable, swInfTable, eachFlowFinalPath, flowTraceTable);
+                
+                needDohierarchy = false;
+                swFlowEntryStruct = removeAllFlowEntry(swFlowEntryStruct, flowStartDatetime(i));
+            end
+            
             rows = strcmp(swInfTable.SrcNode, srcNodeName);
             srcEdgeSw = swInfTable{rows, {'DstNode'}}{1};
 
@@ -96,12 +110,16 @@ for frequency = 1:20
 
             finalPath = findnode(g, srcNodeName);
             
-            if needDohierarchy
+            if flowTraceTable.HierarchicalGroup(i) > 0
                 middleSrcSw = flowTraceTable.MiddleSrcSw{i};
                 middleDstSw = flowTraceTable.MiddleDstSw{i};
                 
                 swList = {srcEdgeSw, middleSrcSw, middleDstSw, dstEdgeSw};
-                prefixList = [pl, original_pl, pl];
+                
+                prefixLength = flowTraceTable.Prefix(i);
+                hie_prefixLength = flowTraceTable.HierarchicalPrefix(i);
+                
+                prefixList = [prefixLength, hie_prefixLength, prefixLength];
                 
                 for j = 1:length(swList) - 1
                     firstSw = swList{j};
@@ -128,7 +146,9 @@ for frequency = 1:20
                     finalPath = [finalPath, finalPath_temp];
                 end
             else
-                [flowEntry, flowSrcIp, flowDstIp]  = setFlowEntry(pl, flowEntry, flowTraceTable, i);
+                prefixLength = flowTraceTable.Prefix(i);
+                
+                [flowEntry, flowSrcIp, flowDstIp]  = setFlowEntry(prefixLength, flowEntry, flowTraceTable, i);
 
                 rows = strcmp(swInfTable.SrcNode, srcNodeName);
                 flowEntry.input = swInfTable{rows, {'DstInf'}};
@@ -149,7 +169,7 @@ for frequency = 1:20
                 updateLinkStruct(finalPath, g, linkThputStruct, ...
                 flowStartDatetime(i), flowEndDatetime(i), flowEndStrtime, linkPreLower, flowEntry, flowRate);
         end
-
+        
         meanFlowTableSize = calculateFlowTableSize(swFlowEntryStruct);
         y_axis_flowTableSize = [y_axis_flowTableSize, meanFlowTableSize];
 
@@ -158,10 +178,9 @@ for frequency = 1:20
             linkThputStruct, eachFlowFinalPath, flowTraceTable, flowStartDatetime, flowEndDatetime);
         
         y_axis_networkThroughput = [y_axis_networkThroughput, meanNetworkThrouput];
+        
+        doHierarchyCount_list = [doHierarchyCount_list, doHierarchyCount];
     end
-    
-    drawFlowTableSizeFigure(x_axis, y_axis_flowTableSize)
-    drawNetworkThroughputFigure(x_axis, y_axis_networkThroughput)
     
     allRound_y_axis_flowTableSize = [allRound_y_axis_flowTableSize; y_axis_flowTableSize];
     allRound_y_axis_networkThroughput = [allRound_y_axis_networkThroughput; y_axis_networkThroughput];
@@ -173,3 +192,28 @@ drawNetworkThroughputFigure(x_axis, mean(allRound_y_axis_networkThroughput))
 
 t2 = datetime('now');
 disp(t2 - t1)
+
+
+function [needDohierarchy, swWithTooManyFlowEntry] = ...
+    checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy)
+    
+    flowEntryNum = arrayfun(@swFlowEntryNumber, swFlowEntryStruct);
+    rows = (flowEntryNum > tableThreshold);
+
+    if any(rows)
+        swWithTooManyFlowEntry = find(rows);
+        needDohierarchy = true;
+    else
+        swWithTooManyFlowEntry = [];
+    end
+end
+
+function flowEntryNum = swFlowEntryNumber(x)
+    global currentFlowTime
+    
+    if isempty(x.entry)
+        flowEntryNum = 0;
+    else
+        flowEntryNum = length(find(datetime({x.entry.endTime}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS') >= currentFlowTime));
+    end
+end

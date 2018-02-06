@@ -4,25 +4,29 @@ function meanFlowTableSize = calculateFlowTableSize(swFlowEntryStruct)
     slot_num = minutes(end_time - start_time);
     
     flowTableSize = zeros(1, slot_num);
-    allSwMeanFlowTableSize = [];
+    finalSwNum = zeros(1, slot_num);
     
     for sw = 1:length(swFlowEntryStruct)
         if isempty(swFlowEntryStruct(sw).entry)
-            allSwMeanFlowTableSize = [allSwMeanFlowTableSize, 0];
             continue
         else
+            flowLoc = [];
             for i = 1:length(swFlowEntryStruct(sw).entry)
                 entryTimeRange = {swFlowEntryStruct(sw).entry(i).startTime, swFlowEntryStruct(sw).entry(i).endTime};
                 entryTimeRange = datetime(entryTimeRange,'Format','yyyy-MM-dd HH:mm:ss.SSS');
                 
                 sloc = floor(minutes(entryTimeRange(1) - start_time)) + 1;
                 eloc = floor(minutes(entryTimeRange(2) - start_time)) + 1;
+                
+                flowLoc = [flowLoc, (sloc:eloc)];
 
                 flowTableSize(sloc:eloc) = flowTableSize(sloc:eloc) + 1;
             end
+            
+            finalSwNum(unique(flowLoc)) = finalSwNum(unique(flowLoc)) + 1;
         end
-        allSwMeanFlowTableSize = [allSwMeanFlowTableSize, mean(flowTableSize)];
     end
     
-    meanFlowTableSize = mean(allSwMeanFlowTableSize);
+    flowTableSize = flowTableSize./finalSwNum;
+    meanFlowTableSize = mean(flowTableSize);
 end

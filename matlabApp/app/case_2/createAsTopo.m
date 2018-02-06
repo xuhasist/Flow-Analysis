@@ -64,11 +64,14 @@ function [swNum, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeTable, hostNum,
     asNum = length(unique(nodeTable.AS));
     hostRange = [hostAvg-hostSd, hostAvg+hostSd];
     
+    allIpSet = randperm(64, eachAsEdgeSwNum*asNum);
+    
     edgeSwNode = [];
     %subnetBin = {};
     %subnetDec = {};
     IP = {};
     edgeSwOrder = [];
+    ipSet_loc = 1;
     for i = 1:asNum
         rows = (nodeTable.AS == i) & strcmp(nodeTable.Type, 'RT_NODE');
         edgeSw = find(rows);
@@ -79,8 +82,10 @@ function [swNum, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeTable, hostNum,
         
         edgeSwNode = [edgeSwNode, edgeSw'];
         
-        x = (i-1) * 20 + 1; % 1, 21, 31, 41 ...
-        ipSet = (x:x+eachAsEdgeSwNum-1);
+        %x = (i-1) * 20 + 1; % 1, 21, 31, 41 ...
+        %ipSet = (x:x+eachAsEdgeSwNum-1);
+        ipSet = allIpSet(ipSet_loc:ipSet_loc+eachAsEdgeSwNum-1);
+        ipSet_loc = ipSet_loc + eachAsEdgeSwNum;
         
         %subIp = dec2bin(ipSet, 8);
         %subIp = strcat(dec2bin(128, 8), subIp);
