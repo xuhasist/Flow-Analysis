@@ -41,6 +41,13 @@ def main():
     df['Protocol'] = df['Protocol'].astype(int)
     df['Length(Bytes)'] = df['Length(Bytes)'].astype(int)
     #df['TCP_Flags'] = df['TCP_Flags'].astype(int)
+    
+    #rows = (df['DateTime'] == '2009-12-18 00:31:04.393672')
+    #print df.ix[rows]
+    #time.sleep(1200)
+    
+    df = df[0:714151]
+    #df = df[0:1369125]
 
     df = df.sort_values(['Protocol', 'Src_IP', 'Dst_IP', 'Src_Port', 'Dst_Port', 'Timestamp'])
     df = df.reset_index(drop=True)
@@ -64,6 +71,7 @@ def main():
     pktTrace = pool.map(generateAttrFlows, df_flowSlice)
     pool.close()
     
+    print 'pool finish'
     pktTrace = filter(None, pktTrace)
     pktTrace = list(chain.from_iterable(pktTrace))
     
@@ -99,11 +107,11 @@ def generateAttrFlows(flowSlice):
     if endLoc == startLoc:
         return pkt
 
-    if flowSlice.iloc[startLoc]['Protocol'] == 6:
-        if ((flowSlice.iloc[startLoc]['TCP_Flags'] != 2 and flowSlice.iloc[startLoc]['TCP_Flags'] != 18) or \
-        (flowSlice.iloc[endLoc]['TCP_Flags'] != 1 and flowSlice.iloc[endLoc]['TCP_Flags'] != 17 and \
-        flowSlice.iloc[endLoc-1]['TCP_Flags'] != 1 and flowSlice.iloc[endLoc-1]['TCP_Flags'] != 17)):
-            return pkt    
+    #if flowSlice.iloc[startLoc]['Protocol'] == 6:
+        #if ((flowSlice.iloc[startLoc]['TCP_Flags'] != 2 and flowSlice.iloc[startLoc]['TCP_Flags'] != 18) or \
+        #(flowSlice.iloc[endLoc]['TCP_Flags'] != 1 and flowSlice.iloc[endLoc]['TCP_Flags'] != 17 and \
+        #flowSlice.iloc[endLoc-1]['TCP_Flags'] != 1 and flowSlice.iloc[endLoc-1]['TCP_Flags'] != 17)):
+            #return pkt    
 
     attributeFlow = flowTpl()
     
