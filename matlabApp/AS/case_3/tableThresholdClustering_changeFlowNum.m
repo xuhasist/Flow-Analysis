@@ -7,12 +7,12 @@ global currentFlowTime
 hostAvg = 50;
 hostSd = 5;
     
-flowNum = 5000;
-
 linkBwdUnit = 10^3; %10Kbps
-startTableThreshold = 50;
-endTableThreshold = 300;
-x_axis = startTableThreshold:50:endTableThreshold;
+tableThreshold = 50;
+
+startFlowNumber = 1000;
+endFlowNumber = 5000;
+x_axis = startFlowNumber:500:endFlowNumber;
 
 allRound_y_axis_flowTableSize_1 = [];
 allRound_y_axis_flowTableSize_2 = [];
@@ -27,51 +27,26 @@ allRound_y_axis_flowTableSize_perFlow = [];
 allRound_y_axis_networkThroughput = [];
 allRound_y_axis_networkThroughput_perFlow = [];
 
-roundNumber = 1;
+roundNumber = 10;
 for frequency = 1:roundNumber
     % fat tree
-    k = 4;
-    [swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP] = ...
-        createFatTreeTopo(k, hostAvg, hostSd);
+    %k = 4;
+    %[swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP] = ...
+        %createFatTreeTopo(k, hostAvg, hostSd);
 
     % AS topo
-    %eachAsEdgeSwNum = 2;
-    %[swNum, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeTable, hostNum, IP] = ...
-    %    createAsTopo_random(eachAsEdgeSwNum, hostAvg, hostSd);
+    eachAsEdgeSwNum = 2;
+    [swNum, srcNode, dstNode, srcInf, dstInf, g, asNum, nodeTable, hostNum, IP] = ...
+        createAsTopo_random(eachAsEdgeSwNum, hostAvg, hostSd);
 
-    
-    [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence] = ...
-        setVariables(swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum);
-
-
-    % remove mice flow
-    flowStartDatetime = datetime(flowTraceTable.StartDatetime, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-    flowEndDatetime = datetime(flowTraceTable.EndDatetime, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
-
-    rows = (flowEndDatetime - flowStartDatetime < seconds(1));
-    flowTraceTable(rows, :) = [];
-    
-    flowStartDatetime(rows) = [];
-    flowEndDatetime(rows) = [];
-    
     
     swDistanceVector = distances(g, 'Method', 'unweighted');
     swDistanceVector = swDistanceVector(1:swNum, 1:swNum);
     
     % for as topo
-    %rows = strcmp(nodeTable.Type, 'RT_NODE');
-    %swDistanceVector(rows, rows) = 0;
+    rows = strcmp(nodeTable.Type, 'RT_NODE');
+    swDistanceVector(rows, rows) = 0;
     
-
-    [idx, group_num] = doKmeans(flowSequence);
-    flowTraceTable.Group = repmat(-1, size(flowTraceTable, 1), 1);
-    flowTraceTable.Prefix = repmat(16, size(flowTraceTable, 1), 1);
-    flowTraceTable = simularityClustering_tableThreshold(g, hostIpTable, swInfTable, flowTraceTable, idx, group_num);
-    
-    swFlowEntryStruct_empty = swFlowEntryStruct;
-    linkTable_empty = linkTable;
-    linkThputStruct_empty = linkThputStruct;
-
     y_axis_flowTableSize_1 = [];
     y_axis_flowTableSize_2 = [];
     y_axis_flowTableSize_3 = [];
@@ -87,28 +62,43 @@ for frequency = 1:roundNumber
     
     doHierarchyCount_list = [];
     
-    [meanFlowTableSize_perFlow, meanNetworkThrouput_perFlow] = ...
-        perFlowClustering(flowStartDatetime, flowEndDatetime, linkBwdUnit, ...
-        hostIpTable, flowTraceTable, swFlowEntryStruct, g, swInfTable, linkTable, linkThputStruct);
-    
-    for tableThreshold = startTableThreshold:50:endTableThreshold
-        swFlowEntryStruct = swFlowEntryStruct_empty;
-        linkTable = linkTable_empty;
-        linkThputStruct = linkThputStruct_empty;
+    for flowNum = startFlowNumber:500:endFlowNumber
+        [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence] = ...
+        setVariables(swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum);
+
+        % remove mice flow
+        flowStartDatetime = datetime(flowTraceTable.StartDatetime, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+        flowEndDatetime = datetime(flowTraceTable.EndDatetime, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS');
+
+        rows = (flowEndDatetime - flowStartDatetime < seconds(1));
+        flowTraceTable(rows, :) = [];
+
+        flowStartDatetime(rows) = [];
+        flowEndDatetime(rows) = [];
+        
+        
+        [meanFlowTableSize_perFlow, meanNetworkThrouput_perFlow] = ...
+            perFlowClustering(flowStartDatetime, flowEndDatetime, linkBwdUnit, ...
+            hostIpTable, flowTraceTable, swFlowEntryStruct, g, swInfTable, linkTable, linkThputStruct);
+        
         
         eachFlowFinalPath = {};
         linkPreLower = [];
         needDohierarchy = false;
         doHierarchyCount = 0;
         
+        [idx, group_num] = doKmeans(flowSequence);
+        
+        flowTraceTable.Group = repmat(-1, size(flowTraceTable, 1), 1);
+        flowTraceTable.Prefix = repmat(16, size(flowTraceTable, 1), 1);
         flowTraceTable.HierarchicalGroup = zeros(size(flowTraceTable, 1), 1);
         flowTraceTable.MiddleSrcSw = repmat({{}}, size(flowTraceTable, 1), 1);
         flowTraceTable.MiddleDstSw = repmat({{}}, size(flowTraceTable, 1), 1);
         flowTraceTable.HierarchicalPrefix = zeros(size(flowTraceTable, 1), 1);
         flowTraceTable.ClusterPort = zeros(size(flowTraceTable, 1), 1);
         
-        %flowTraceTable = simularityClustering_tableThreshold(g, hostIpTable, swInfTable, flowTraceTable, flowSequence);
-                
+        flowTraceTable = simularityClustering_tableThreshold(g, hostIpTable, swInfTable, flowTraceTable, idx, group_num);
+        
         preCheckTableTime = flowStartDatetime(1);
         for i = 1:size(flowTraceTable, 1)
             i
@@ -232,7 +222,7 @@ for frequency = 1:roundNumber
         
         doHierarchyCount_list = [doHierarchyCount_list, doHierarchyCount];
         
-        filename = ['memory/memory_', int2str(frequency), '_', int2str(tableThreshold)];
+        filename = ['memory/memory_', int2str(frequency), '_', int2str(flowNum)];
         save(filename)
     end
     
@@ -278,6 +268,7 @@ end
 t2 = datetime('now');
 disp(t2 - t1)
 
+save('memory/final')
 
 function [needDohierarchy, swWithTooManyFlowEntry] = ...
     checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy)
