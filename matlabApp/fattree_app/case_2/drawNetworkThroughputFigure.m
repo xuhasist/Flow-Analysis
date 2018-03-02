@@ -17,11 +17,9 @@ function drawNetworkThroughputFigure(x_axis, y_axis_networkThroughput, y_axis_ne
     legend('clustering', 'per-flow', 'Location', 'southeast')
 
     xlabel(x_label)
-    %ylabel('Average Network Throuput (Kbps)')
     ylabel('Average Network Throuput (Mbps)')
 
     xticks(x)
-    %yticks(floor(min(y)/10)*10: ceil(max(y)/10)*10)
     
-    print(['figure/networkThroughput/networkThroughputFigure', '_', int2str(frequency)], '-dpng')
+    print(['figure/networkThroughput/networkThroughputFigure_', int2str(frequency)], '-dpng')
 end

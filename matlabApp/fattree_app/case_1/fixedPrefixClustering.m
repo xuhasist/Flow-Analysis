@@ -1,7 +1,7 @@
-function fixedPrefixClustering()
-    clearvars -except
-
+function fixedPrefixClustering(roundNumber)
     t1 = datetime('now');
+    
+    global currentFlowTime
 
     hostAvg = 50;
     hostSd = 5;
@@ -25,8 +25,9 @@ function fixedPrefixClustering()
     allRound_y_axis_flowTableSize_8 = [];
 
     allRound_y_axis_networkThroughput = [];
+    
+    allRound_y_axis_pathLength = [];
 
-    roundNumber = 3;
     for frequency = 1:roundNumber
         % fat tree
         k = 4;
@@ -39,7 +40,7 @@ function fixedPrefixClustering()
             %createAsTopo_random(eachAsEdgeSwNum, hostAvg, hostSd);
 
 
-        [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence] = ...
+        [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence, swFlowEntryStruct_accumulation] = ...
             setVariables(swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum);
 
 
@@ -67,6 +68,7 @@ function fixedPrefixClustering()
         swFlowEntryStruct_empty = swFlowEntryStruct;
         linkTable_empty = linkTable;
         linkThputStruct_empty = linkThputStruct;
+        %swFlowEntryStruct_accumulation_empty = swFlowEntryStruct_accumulation;
 
         y_axis_flowTableSize_1 = [];
         y_axis_flowTableSize_2 = [];
@@ -78,14 +80,18 @@ function fixedPrefixClustering()
         y_axis_flowTableSize_8 = [];
 
         y_axis_networkThroughput = [];
+        
+        y_axis_pathLength = [];
 
         for pl = startPrefixLength:endPrefixLength
             swFlowEntryStruct = swFlowEntryStruct_empty;
             linkTable = linkTable_empty;
             linkThputStruct = linkThputStruct_empty;
+            %swFlowEntryStruct_accumulation = swFlowEntryStruct_accumulation_empty;
 
             eachFlowFinalPath = {};
             linkPreLower = [];
+            %swPreLower = [];
             needDohierarchy = false;  
 
             flowTraceTable.Group = repmat(-1, size(flowTraceTable, 1), 1);
@@ -107,11 +113,18 @@ function fixedPrefixClustering()
                 flowTraceTable = similarityClustering_fixedPrefix(pl, flowTraceTable, idx, group_num);
             end
 
+            allSwTableSize_list = {};
+            for i = 1:swNum
+               allSwTableSize_list(i).flowNum = [];
+            end
+            
             for i = 1:size(flowTraceTable, 1)
                 i
 
                 [srcNodeName, dstNodeName, flowStartStrtime, flowEndStrtime, flowRate, flowTraceTable, flowEntry] = ...
                     setFlowInfo(flowStartDatetime(i), flowEndDatetime(i), linkBwdUnit, hostIpTable, flowTraceTable, i);
+                
+                currentFlowTime = flowStartDatetime(i);
 
                 rows = strcmp(swInfTable.SrcNode, srcNodeName);
                 srcEdgeSw = swInfTable{rows, {'DstNode'}}{1};
@@ -177,29 +190,41 @@ function fixedPrefixClustering()
                 finalPath = [finalPath, findnode(g, dstNodeName)];
                 finalPath(diff(finalPath)==0) = [];
                 eachFlowFinalPath = [eachFlowFinalPath; finalPath];
+                
+                allSwTableSize_list = recordSwTableSize(swFlowEntryStruct, finalPath, allSwTableSize_list);
 
                 [linkThputStruct, linkPreLower] = ...
                     updateLinkStruct(finalPath, g, linkThputStruct, ...
                     flowStartDatetime(i), flowEndDatetime(i), flowEndStrtime, linkPreLower, flowEntry, flowRate);
+                
+                %[swFlowEntryStruct_accumulation, swPreLower] = ...
+                    %updateSwStruct(finalPath, swFlowEntryStruct, swFlowEntryStruct_accumulation, ...
+                    %flowStartDatetime(i), flowEndDatetime(i),flowEndStrtime, swPreLower, flowEntry);
             end
 
-            [meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, meanFlowTableSize_6, meanFlowTableSize_7, meanFlowTableSize_8] = ...
-                calculateFlowTableSize(swFlowEntryStruct);
+            %[meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, meanFlowTableSize_6, meanFlowTableSize_7, meanFlowTableSize_8] = ...
+                %calculateFlowTableSize(swFlowEntryStruct);
+            
+            %[meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, swFlowEntryStruct_accumulation] = ...
+                %calculateFlowTableSize_mod(swFlowEntryStruct_accumulation);
+            
+            [meanFlowTableSize_1] = calculateFlowTableSize_mod2(allSwTableSize_list);
 
             y_axis_flowTableSize_1 = [y_axis_flowTableSize_1, meanFlowTableSize_1];
-            y_axis_flowTableSize_2 = [y_axis_flowTableSize_2, meanFlowTableSize_2];
-            y_axis_flowTableSize_3 = [y_axis_flowTableSize_3, meanFlowTableSize_3];
-            y_axis_flowTableSize_4 = [y_axis_flowTableSize_4, meanFlowTableSize_4];
-            y_axis_flowTableSize_5 = [y_axis_flowTableSize_5, meanFlowTableSize_5];
-            y_axis_flowTableSize_6 = [y_axis_flowTableSize_6, meanFlowTableSize_6];
-            y_axis_flowTableSize_7 = [y_axis_flowTableSize_7, meanFlowTableSize_7];
-            y_axis_flowTableSize_8 = [y_axis_flowTableSize_8, meanFlowTableSize_8];
+            %y_axis_flowTableSize_2 = [y_axis_flowTableSize_2, meanFlowTableSize_2];
+            %y_axis_flowTableSize_3 = [y_axis_flowTableSize_3, meanFlowTableSize_3];
+            %y_axis_flowTableSize_4 = [y_axis_flowTableSize_4, meanFlowTableSize_4];
+            %y_axis_flowTableSize_5 = [y_axis_flowTableSize_5, meanFlowTableSize_5];
+            %y_axis_flowTableSize_6 = [y_axis_flowTableSize_6, meanFlowTableSize_6];
+            %y_axis_flowTableSize_7 = [y_axis_flowTableSize_7, meanFlowTableSize_7];
+            %y_axis_flowTableSize_8 = [y_axis_flowTableSize_8, meanFlowTableSize_8];
 
             [linkThputStruct, meanNetworkThrouput] = ...
                 calculateNetworkThrouput(g, linkBwdUnit, ...
                 linkThputStruct, eachFlowFinalPath, flowTraceTable, flowStartDatetime, flowEndDatetime);
 
             y_axis_networkThroughput = [y_axis_networkThroughput, meanNetworkThrouput];
+            y_axis_pathLength = [y_axis_pathLength, mean(cellfun(@(x) length(x), eachFlowFinalPath))];
 
             if needDohierarchy
                 flowTraceTable = hierarchicalClustering_fixedPrefix(original_pl, g, swDistanceVector, hostIpTable, swInfTable, flowTraceTable, idx, group_num);
@@ -213,38 +238,43 @@ function fixedPrefixClustering()
         end
 
         allRound_y_axis_flowTableSize_1 = [allRound_y_axis_flowTableSize_1; y_axis_flowTableSize_1];
-        allRound_y_axis_flowTableSize_2 = [allRound_y_axis_flowTableSize_2; y_axis_flowTableSize_2];
-        allRound_y_axis_flowTableSize_3 = [allRound_y_axis_flowTableSize_3; y_axis_flowTableSize_3];
-        allRound_y_axis_flowTableSize_4 = [allRound_y_axis_flowTableSize_4; y_axis_flowTableSize_4];
-        allRound_y_axis_flowTableSize_5 = [allRound_y_axis_flowTableSize_5; y_axis_flowTableSize_5];
-        allRound_y_axis_flowTableSize_6 = [allRound_y_axis_flowTableSize_6; y_axis_flowTableSize_6];
-        allRound_y_axis_flowTableSize_7 = [allRound_y_axis_flowTableSize_7; y_axis_flowTableSize_7];
-        allRound_y_axis_flowTableSize_8 = [allRound_y_axis_flowTableSize_8; y_axis_flowTableSize_8];
+        %allRound_y_axis_flowTableSize_2 = [allRound_y_axis_flowTableSize_2; y_axis_flowTableSize_2];
+        %allRound_y_axis_flowTableSize_3 = [allRound_y_axis_flowTableSize_3; y_axis_flowTableSize_3];
+        %allRound_y_axis_flowTableSize_4 = [allRound_y_axis_flowTableSize_4; y_axis_flowTableSize_4];
+        %allRound_y_axis_flowTableSize_5 = [allRound_y_axis_flowTableSize_5; y_axis_flowTableSize_5];
+        %allRound_y_axis_flowTableSize_6 = [allRound_y_axis_flowTableSize_6; y_axis_flowTableSize_6];
+        %allRound_y_axis_flowTableSize_7 = [allRound_y_axis_flowTableSize_7; y_axis_flowTableSize_7];
+        %allRound_y_axis_flowTableSize_8 = [allRound_y_axis_flowTableSize_8; y_axis_flowTableSize_8];
 
         allRound_y_axis_networkThroughput = [allRound_y_axis_networkThroughput; y_axis_networkThroughput];
+        allRound_y_axis_pathLength = [allRound_y_axis_pathLength; y_axis_pathLength];
 
         if frequency == 1
             drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_1, 1, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_2, 2, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_3, 3, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_4, 4, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_5, 5, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_6, 6, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_7, 7, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_8, 8, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_2, 2, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_3, 3, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_4, 4, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_5, 5, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_6, 6, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_7, 7, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, allRound_y_axis_flowTableSize_8, 8, frequency, x_label)
 
             drawNetworkThroughputFigure_fixedPrefix(x_axis, allRound_y_axis_networkThroughput, frequency, x_label)
+            
+            drawPathLengthFigure_fixedPrefix(x_axis, allRound_y_axis_pathLength, frequency, x_label)
         else
             drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_1), 1, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_2), 2, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_3), 3, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_4), 4, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_5), 5, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_6), 6, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_7), 7, frequency, x_label)
-            drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_8), 8, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_2), 2, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_3), 3, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_4), 4, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_5), 5, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_6), 6, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_7), 7, frequency, x_label)
+            %drawFlowTableSizeFigure_fixedPrefix(x_axis, mean(allRound_y_axis_flowTableSize_8), 8, frequency, x_label)
 
             drawNetworkThroughputFigure_fixedPrefix(x_axis, mean(allRound_y_axis_networkThroughput), frequency, x_label)
+            
+            drawPathLengthFigure_fixedPrefix(x_axis, mean(allRound_y_axis_pathLength), frequency, x_label)
         end
     end
 
@@ -252,6 +282,26 @@ function fixedPrefixClustering()
     disp(t2 - t1)
     
     save('memory/final')
+end
+
+function allSwTableSize_list = recordSwTableSize(swFlowEntryStruct, finalPath, allSwTableSize_list)
+    checkedSwitch = finalPath(2:end-1);
+    
+    flowEntryNum = arrayfun(@swFlowEntryNumber, swFlowEntryStruct(checkedSwitch));
+    
+    for i = 1:length(checkedSwitch)
+        allSwTableSize_list(checkedSwitch(i)).flowNum = [allSwTableSize_list(checkedSwitch(i)).flowNum, flowEntryNum(i)];
+    end
+end
+
+function flowEntryNum = swFlowEntryNumber(x)
+    global currentFlowTime
+    
+    if isempty(x.entry)
+        flowEntryNum = 0;
+    else
+        flowEntryNum = length(find(datetime({x.entry.endTime}, 'Format', 'yyyy-MM-dd HH:mm:ss.SSS') >= currentFlowTime));
+    end
 end
 
 function [idx, k] = doKmeans(flowSequence)

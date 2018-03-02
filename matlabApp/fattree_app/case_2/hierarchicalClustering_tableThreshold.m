@@ -1,5 +1,5 @@
-function flowTraceTable = hierarchicalClustering_tableThreshold(tableThreshold, swWithTooManyFlowEntry, ...
-    g, swDistanceVector, hostIpTable, swInfTable, eachFlowFinalPath, flowTraceTable)
+function [flowTraceTable, doHierarchyCount] = hierarchicalClustering_tableThreshold(tableThreshold, swWithTooManyFlowEntry, ...
+    g, swDistanceVector, hostIpTable, swInfTable, eachFlowFinalPath, flowTraceTable, doHierarchyCount)
 
     for i = 1:length(swWithTooManyFlowEntry)
         passFlow = cellfun(@(x) any(ismember(x, swWithTooManyFlowEntry(i))), eachFlowFinalPath, 'UniformOutput', false);
@@ -46,6 +46,8 @@ function flowTraceTable = hierarchicalClustering_tableThreshold(tableThreshold, 
             rows = ismember(groupSize, sortGroupSize(1:2));
             mergeGroup = groupId(rows);
             mergeGroup_hierarchicalId = hierarchicalGroup(rows);
+            
+            doHierarchyCount = doHierarchyCount + 1;
             
             a = hierarchicalGroup(~rows);
             groupNumber = length(find(a == 0)) + length(unique(a(a ~= 0))) + 1; % group + hie_group + now

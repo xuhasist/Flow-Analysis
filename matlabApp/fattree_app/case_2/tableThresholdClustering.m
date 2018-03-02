@@ -1,6 +1,4 @@
-function tableThresholdClustering()
-    clearvars -except
-
+function tableThresholdClustering(roundNumber)
     t1 = datetime('now');
 
     global currentFlowTime
@@ -12,8 +10,8 @@ function tableThresholdClustering()
 
     linkBwdUnit = 10^3; %10Kbps
     startTableThreshold = 50;
-    endTableThreshold = 300;
-    x_axis = startTableThreshold:50:endTableThreshold;
+    endTableThreshold = 200;
+    x_axis = startTableThreshold:30:endTableThreshold;
     x_label = 'Flow Table Size Threshold';
 
     allRound_y_axis_flowTableSize_1 = [];
@@ -28,8 +26,12 @@ function tableThresholdClustering()
 
     allRound_y_axis_networkThroughput = [];
     allRound_y_axis_networkThroughput_perFlow = [];
+    
+    allRound_y_axis_pathLength = [];
+    allRound_y_axis_pathLength_perFlow = [];
+    
+    allRound_y_axis_doHierarchyCount = [];
 
-    roundNumber = 3;
     for frequency = 1:roundNumber
         % fat tree
         k = 4;
@@ -42,7 +44,7 @@ function tableThresholdClustering()
             %createAsTopo_random(eachAsEdgeSwNum, hostAvg, hostSd);
 
 
-        [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence] = ...
+        [swInfTable, swFlowEntryStruct, hostIpTable, linkTable, linkThputStruct, flowTraceTable, flowSequence, swFlowEntryStruct_accumulation] = ...
             setVariables(swNum, srcNode, dstNode, srcInf, dstInf, g, hostNum, IP, flowNum);
 
 
@@ -73,6 +75,7 @@ function tableThresholdClustering()
         swFlowEntryStruct_empty = swFlowEntryStruct;
         linkTable_empty = linkTable;
         linkThputStruct_empty = linkThputStruct;
+        %swFlowEntryStruct_accumulation_empty = swFlowEntryStruct_accumulation;
 
         y_axis_flowTableSize_1 = [];
         y_axis_flowTableSize_2 = [];
@@ -86,20 +89,25 @@ function tableThresholdClustering()
 
         y_axis_networkThroughput = [];
         y_axis_networkThroughput_perFlow = [];
+        
+        y_axis_pathLength = [];
+        y_axis_pathLength_perFlow = [];
 
         doHierarchyCount_list = [];
 
-        [meanFlowTableSize_perFlow, meanNetworkThrouput_perFlow] = ...
-            perFlowClustering(flowStartDatetime, flowEndDatetime, linkBwdUnit, ...
+        [meanFlowTableSize_perFlow, meanNetworkThrouput_perFlow, meanPathLength_perFlow] = ...
+            perFlowClustering(swNum, flowStartDatetime, flowEndDatetime, linkBwdUnit, ...
             hostIpTable, flowTraceTable, swFlowEntryStruct, g, swInfTable, linkTable, linkThputStruct);
 
-        for tableThreshold = startTableThreshold:50:endTableThreshold
+        for tableThreshold = startTableThreshold:30:endTableThreshold
             swFlowEntryStruct = swFlowEntryStruct_empty;
             linkTable = linkTable_empty;
             linkThputStruct = linkThputStruct_empty;
+            %swFlowEntryStruct_accumulation = swFlowEntryStruct_accumulation_empty;
 
             eachFlowFinalPath = {};
             linkPreLower = [];
+            swPreLower = [];
             needDohierarchy = false;
             doHierarchyCount = 0;
 
@@ -112,6 +120,12 @@ function tableThresholdClustering()
             %flowTraceTable = similarityClustering_tableThreshold(g, hostIpTable, swInfTable, flowTraceTable, flowSequence);
 
             %preCheckTableTime = flowStartDatetime(1);
+            
+            allSwTableSize_list = {};
+            for i = 1:swNum
+               allSwTableSize_list(i).flowNum = [];
+            end
+            
             for i = 1:size(flowTraceTable, 1)
                 i
 
@@ -208,12 +222,14 @@ function tableThresholdClustering()
                 finalPath(diff(finalPath)==0) = [];
                 eachFlowFinalPath = [eachFlowFinalPath; finalPath];
 
-                [needDohierarchy, swWithTooManyFlowEntry] = ...
-                        checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy, finalPath);
+                [needDohierarchy, swWithTooManyFlowEntry, allSwTableSize_list] = ...
+                        checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy, finalPath, allSwTableSize_list);
 
                 if needDohierarchy
-                    doHierarchyCount = doHierarchyCount + 1;
-                    flowTraceTable = hierarchicalClustering_tableThreshold(tableThreshold, swWithTooManyFlowEntry, g, swDistanceVector, hostIpTable, swInfTable, eachFlowFinalPath, flowTraceTable);
+                    [flowTraceTable, doHierarchyCount] = ...
+                        hierarchicalClustering_tableThreshold(tableThreshold, swWithTooManyFlowEntry, ...
+                        g, swDistanceVector, hostIpTable, swInfTable, eachFlowFinalPath, flowTraceTable, ...
+                        doHierarchyCount);
 
                     needDohierarchy = false;
                     swFlowEntryStruct = removeAllFlowEntry(swFlowEntryStruct, flowStartDatetime(i));
@@ -222,28 +238,40 @@ function tableThresholdClustering()
                 [linkThputStruct, linkPreLower] = ...
                     updateLinkStruct(finalPath, g, linkThputStruct, ...
                     flowStartDatetime(i), flowEndDatetime(i), flowEndStrtime, linkPreLower, flowEntry, flowRate);
+                
+                %[swFlowEntryStruct_accumulation, swPreLower] = ...
+                    %updateSwStruct(finalPath, swFlowEntryStruct, swFlowEntryStruct_accumulation, ...
+                    %flowStartDatetime(i), flowEndDatetime(i),flowEndStrtime, swPreLower, flowEntry);
             end
 
-            [meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, meanFlowTableSize_6, meanFlowTableSize_7, meanFlowTableSize_8] = ...
-                calculateFlowTableSize(swFlowEntryStruct);
+            %[meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, meanFlowTableSize_6, meanFlowTableSize_7, meanFlowTableSize_8] = ...
+                %calculateFlowTableSize(swFlowEntryStruct);
+            
+            %[meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4, meanFlowTableSize_5, swFlowEntryStruct_accumulation] = ...
+                %calculateFlowTableSize_mod(swFlowEntryStruct_accumulation);
+                
+            [meanFlowTableSize_1, meanFlowTableSize_2, meanFlowTableSize_3, meanFlowTableSize_4] = calculateFlowTableSize_mod2(allSwTableSize_list);
 
             y_axis_flowTableSize_1 = [y_axis_flowTableSize_1, meanFlowTableSize_1];
             y_axis_flowTableSize_2 = [y_axis_flowTableSize_2, meanFlowTableSize_2];
             y_axis_flowTableSize_3 = [y_axis_flowTableSize_3, meanFlowTableSize_3];
             y_axis_flowTableSize_4 = [y_axis_flowTableSize_4, meanFlowTableSize_4];
-            y_axis_flowTableSize_5 = [y_axis_flowTableSize_5, meanFlowTableSize_5];
-            y_axis_flowTableSize_6 = [y_axis_flowTableSize_6, meanFlowTableSize_6];
-            y_axis_flowTableSize_7 = [y_axis_flowTableSize_7, meanFlowTableSize_7];
-            y_axis_flowTableSize_8 = [y_axis_flowTableSize_8, meanFlowTableSize_8];
+            %y_axis_flowTableSize_5 = [y_axis_flowTableSize_5, meanFlowTableSize_5];
+            %y_axis_flowTableSize_6 = [y_axis_flowTableSize_6, meanFlowTableSize_6];
+            %y_axis_flowTableSize_7 = [y_axis_flowTableSize_7, meanFlowTableSize_7];
+            %y_axis_flowTableSize_8 = [y_axis_flowTableSize_8, meanFlowTableSize_8];
 
             [linkThputStruct, meanNetworkThrouput] = ...
                 calculateNetworkThrouput(g, linkBwdUnit, ...
                 linkThputStruct, eachFlowFinalPath, flowTraceTable, flowStartDatetime, flowEndDatetime);
 
             y_axis_networkThroughput = [y_axis_networkThroughput, meanNetworkThrouput];
+            
+            y_axis_pathLength = [y_axis_pathLength, mean(cellfun(@(x) length(x), eachFlowFinalPath))];
 
             y_axis_flowTableSize_perFlow = [y_axis_flowTableSize_perFlow, meanFlowTableSize_perFlow];
             y_axis_networkThroughput_perFlow = [y_axis_networkThroughput_perFlow, meanNetworkThrouput_perFlow];
+            y_axis_pathLength_perFlow = [y_axis_pathLength_perFlow, meanPathLength_perFlow];
 
             doHierarchyCount_list = [doHierarchyCount_list, doHierarchyCount];
 
@@ -255,38 +283,47 @@ function tableThresholdClustering()
         allRound_y_axis_flowTableSize_2 = [allRound_y_axis_flowTableSize_2; y_axis_flowTableSize_2];
         allRound_y_axis_flowTableSize_3 = [allRound_y_axis_flowTableSize_3; y_axis_flowTableSize_3];
         allRound_y_axis_flowTableSize_4 = [allRound_y_axis_flowTableSize_4; y_axis_flowTableSize_4];
-        allRound_y_axis_flowTableSize_5 = [allRound_y_axis_flowTableSize_5; y_axis_flowTableSize_5];
-        allRound_y_axis_flowTableSize_6 = [allRound_y_axis_flowTableSize_6; y_axis_flowTableSize_6];
-        allRound_y_axis_flowTableSize_7 = [allRound_y_axis_flowTableSize_7; y_axis_flowTableSize_7];
-        allRound_y_axis_flowTableSize_8 = [allRound_y_axis_flowTableSize_8; y_axis_flowTableSize_8];
+        %allRound_y_axis_flowTableSize_5 = [allRound_y_axis_flowTableSize_5; y_axis_flowTableSize_5];
+        %allRound_y_axis_flowTableSize_6 = [allRound_y_axis_flowTableSize_6; y_axis_flowTableSize_6];
+        %allRound_y_axis_flowTableSize_7 = [allRound_y_axis_flowTableSize_7; y_axis_flowTableSize_7];
+        %allRound_y_axis_flowTableSize_8 = [allRound_y_axis_flowTableSize_8; y_axis_flowTableSize_8];
 
         allRound_y_axis_networkThroughput = [allRound_y_axis_networkThroughput; y_axis_networkThroughput];
+        
+        allRound_y_axis_pathLength = [allRound_y_axis_pathLength; y_axis_pathLength];
 
         allRound_y_axis_flowTableSize_perFlow = [allRound_y_axis_flowTableSize_perFlow; y_axis_flowTableSize_perFlow];
         allRound_y_axis_networkThroughput_perFlow = [allRound_y_axis_networkThroughput_perFlow; y_axis_networkThroughput_perFlow];
+        allRound_y_axis_pathLength_perFlow = [allRound_y_axis_pathLength_perFlow; y_axis_pathLength_perFlow];
+        
+        allRound_y_axis_doHierarchyCount = [allRound_y_axis_doHierarchyCount; doHierarchyCount_list];
 
         if frequency == 1
             drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_1, allRound_y_axis_flowTableSize_perFlow, 1, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_2, allRound_y_axis_flowTableSize_perFlow, 2, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_3, allRound_y_axis_flowTableSize_perFlow, 3, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_4, allRound_y_axis_flowTableSize_perFlow, 4, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_5, allRound_y_axis_flowTableSize_perFlow, 5, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_6, allRound_y_axis_flowTableSize_perFlow, 6, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_7, allRound_y_axis_flowTableSize_perFlow, 7, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_8, allRound_y_axis_flowTableSize_perFlow, 8, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_5, allRound_y_axis_flowTableSize_perFlow, 5, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_6, allRound_y_axis_flowTableSize_perFlow, 6, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_7, allRound_y_axis_flowTableSize_perFlow, 7, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, allRound_y_axis_flowTableSize_8, allRound_y_axis_flowTableSize_perFlow, 8, frequency, x_label)
 
             drawNetworkThroughputFigure(x_axis, allRound_y_axis_networkThroughput, allRound_y_axis_networkThroughput_perFlow, frequency, x_label)
+            drawPathLengthFigure(x_axis, allRound_y_axis_pathLength, allRound_y_axis_pathLength_perFlow, frequency, x_label)
+            drawFlowMergingFigure(x_axis, allRound_y_axis_doHierarchyCount, frequency, x_label)
         else
             drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_1), mean(allRound_y_axis_flowTableSize_perFlow), 1, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_2), mean(allRound_y_axis_flowTableSize_perFlow), 2, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_3), mean(allRound_y_axis_flowTableSize_perFlow), 3, frequency, x_label)
             drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_4), mean(allRound_y_axis_flowTableSize_perFlow), 4, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_5), mean(allRound_y_axis_flowTableSize_perFlow), 5, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_6), mean(allRound_y_axis_flowTableSize_perFlow), 6, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_7), mean(allRound_y_axis_flowTableSize_perFlow), 7, frequency, x_label)
-            drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_8), mean(allRound_y_axis_flowTableSize_perFlow), 8, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_5), mean(allRound_y_axis_flowTableSize_perFlow), 5, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_6), mean(allRound_y_axis_flowTableSize_perFlow), 6, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_7), mean(allRound_y_axis_flowTableSize_perFlow), 7, frequency, x_label)
+            %drawFlowTableSizeFigure(x_axis, mean(allRound_y_axis_flowTableSize_8), mean(allRound_y_axis_flowTableSize_perFlow), 8, frequency, x_label)
 
             drawNetworkThroughputFigure(x_axis, mean(allRound_y_axis_networkThroughput), mean(allRound_y_axis_networkThroughput_perFlow), frequency, x_label)
+            drawPathLengthFigure(x_axis, mean(allRound_y_axis_pathLength), mean(allRound_y_axis_pathLength_perFlow), frequency, x_label)
+            drawFlowMergingFigure(x_axis, mean(allRound_y_axis_doHierarchyCount), frequency, x_label)
         end
     end
 
@@ -296,12 +333,17 @@ function tableThresholdClustering()
     save('memory/final')
 end
 
-function [needDohierarchy, swWithTooManyFlowEntry] = ...
-    checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy, finalPath)
+function [needDohierarchy, swWithTooManyFlowEntry, allSwTableSize_list] = ...
+    checkFlowTable(tableThreshold, swFlowEntryStruct, needDohierarchy, finalPath, allSwTableSize_list)
 
     checkedSwitch = finalPath(2:end-1);
     
     flowEntryNum = arrayfun(@swFlowEntryNumber, swFlowEntryStruct(checkedSwitch));
+    
+    for i = 1:length(checkedSwitch)
+        allSwTableSize_list(checkedSwitch(i)).flowNum = [allSwTableSize_list(checkedSwitch(i)).flowNum, flowEntryNum(i)];
+    end
+    
     rows = (flowEntryNum > tableThreshold);
 
     if any(rows)
